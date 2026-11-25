@@ -1,0 +1,6 @@
+{
+  "name": "Deck Football Companion",
+  "description": "Responsive single-page web companion for Deck Football with a live scoreboard, 100-yard gridiron tracker, synchronized game and 30-second play clocks, hand limit tracker, and card play calculators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

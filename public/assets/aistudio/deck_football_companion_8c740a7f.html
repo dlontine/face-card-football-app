@@ -1,0 +1,2333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Deck Football Companion</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #151e32;
+      --border: #23324d;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --home: #38bdf8;
+      --away: #f87171;
+      --accent: #10b981;
+      --warning: #f59e0b;
+      --gold: #fbbf24;
+      --loss: #991b1b;
+      --gain: #065f46;
+      --purple: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      outline: none;
+      font-weight: 700;
+      border-radius: 6px;
+      transition: transform 0.1s ease, filter 0.15s ease;
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    /* Top Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: var(--gold);
+    }
+
+    .header-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-header {
+      padding: 5px 9px;
+      font-size: 11px;
+      background: #24324f;
+      color: var(--text);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Scoreboard Banner */
+    .score-banner {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+
+    .team-col {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .team-col.away {
+      justify-content: flex-end;
+    }
+
+    .team-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .team-badge.off {
+      background: var(--gold);
+      color: #000;
+      animation: pulse 1.8s infinite;
+    }
+
+    .team-badge.def {
+      background: #334155;
+      color: var(--text-muted);
+    }
+
+    .team-name {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .home-name { color: var(--home); }
+    .away-name { color: var(--away); }
+
+    .score-num {
+      font-size: 26px;
+      font-weight: 900;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    .qtr-badge {
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--warning);
+      background: #0b1120;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.75; }
+    }
+
+    /* Clocks Row */
+    .clocks-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .clock-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .clock-meta {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .clock-label {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .clock-display {
+      font-family: monospace;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--accent);
+      line-height: 1.1;
+    }
+
+    .clock-display.play {
+      color: var(--warning);
+    }
+
+    .btn-clock-action {
+      font-size: 11px;
+      padding: 6px 10px;
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* Down & Possession Bar */
+    .down-bar {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .down-header-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .down-tag {
+      font-size: 19px;
+      font-weight: 900;
+      color: var(--gold);
+      letter-spacing: 0.02em;
+    }
+
+    .loc-tag {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .down-quick-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .btn-situation {
+      font-size: 11px;
+      padding: 8px 4px;
+      border-radius: 6px;
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+    }
+    .btn-situation.to { background: #451a03; color: #fdba74; }
+    .btn-situation.punt { background: #0c4a6e; color: #7dd3fc; }
+    .btn-situation.fg { background: #713f12; color: #fde047; }
+    .btn-situation.reset { background: #064e3b; color: #6ee7b7; }
+
+    /* SVG Football Field */
+    .field-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-card-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .svg-field-wrap {
+      width: 100%;
+      height: 125px;
+      border: 2px solid #ffffff;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      position: relative;
+    }
+
+    .svg-field-wrap svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .scrubber-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-muted);
+    }
+
+    .scrubber-wrap input[type=range] {
+      flex: 1;
+      accent-color: var(--gold);
+    }
+
+    /* Quick Yardage Section */
+    .quick-section {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .quick-title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .quick-grid-row {
+      display: grid;
+      gap: 4px;
+    }
+
+    .row-losses {
+      grid-template-columns: repeat(10, 1fr);
+    }
+
+    .row-gains {
+      grid-template-columns: repeat(8, 1fr);
+    }
+
+    .btn-yard {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 8px 0;
+      border-radius: 5px;
+      color: white;
+      text-align: center;
+    }
+
+    .btn-loss { background: #4c0519; color: #fda4af; }
+    .btn-loss:hover { background: #881337; }
+
+    .btn-inc { background: #334155; color: #e2e8f0; grid-column: span 2; }
+    .btn-gain { background: #064e3b; color: #a7f3d0; }
+    .btn-gain:hover { background: #047857; }
+    .btn-firstdown-yard { background: #713f12; color: #fef08a; font-weight: 900; }
+
+    /* Big Play Calc Button */
+    .btn-open-calc {
+      width: 100%;
+      padding: 13px;
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    /* Status Bar */
+    .status-alert {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 11px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 14px;
+    }
+
+    .modal-backdrop.active {
+      display: flex !important;
+    }
+
+    .modal-card {
+      background: #131b2e;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .btn-close {
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 22px;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+
+    /* Calculator Keyboard */
+    .calc-team-block {
+      background: #0a0f1d;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .calc-team-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .calc-keyboard-big {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .btn-calc-key {
+      padding: 11px 0;
+      font-size: 13px;
+      font-weight: 900;
+      background: #1e293b;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 6px;
+    }
+    .btn-calc-key:hover { background: #334155; }
+
+    .btn-calc-joker {
+      grid-column: span 4;
+      background: #831843;
+      border-color: #be185d;
+      color: #fbcfe8;
+    }
+
+    .btn-calc-joker-offense {
+      grid-column: span 4;
+      background: #14532d;
+      border-color: #22c55e;
+      color: #bbf7d0;
+    }
+
+    .selected-chips {
+      display: flex;
+      gap: 6px;
+      min-height: 34px;
+      align-items: center;
+      padding: 4px;
+      background: #020617;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      background: #334155;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .chip:hover { background: #ef4444; }
+
+    .calc-summary {
+      background: #020617;
+      border: 1px solid var(--gold);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .calc-yard-diff {
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--gold);
+    }
+
+    .rule-box {
+      background: rgba(251, 191, 36, 0.08);
+      border-left: 3px solid var(--gold);
+      padding: 8px 10px;
+      font-size: 12px;
+      border-radius: 4px;
+      line-height: 1.4;
+    }
+
+    .rules-scroll {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .rules-scroll h4 {
+      color: var(--gold);
+      margin-top: 4px;
+      font-size: 13px;
+    }
+    .rules-scroll ul {
+      margin-left: 18px;
+    }
+
+    /* Option Pill Selectors */
+    .pill-group {
+      display: flex;
+      gap: 6px;
+      background: #0a0f1d;
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .pill-btn {
+      flex: 1;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 800;
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 6px;
+    }
+
+    .pill-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header Bar -->
+  <div class="top-bar">
+    <div class="logo-group">
+      <span>🏈</span> DECK FOOTBALL
+    </div>
+    <div class="header-btns">
+      <button class="btn-header" id="btnOpenScoreModal">✏️ Score</button>
+      <button class="btn-header" id="btnOpenRules">📖 Rules</button>
+      <button class="btn-header" id="btnResetGame">🔄 New / Qtr</button>
+    </div>
+  </div>
+
+  <!-- Scoreboard Banner -->
+  <div class="score-banner">
+    <div class="team-col home">
+      <span class="team-badge off" id="badgeHome">OFF</span>
+      <span class="team-name home-name">HOME</span>
+      <span class="score-num" id="scoreHome">0</span>
+    </div>
+    <div class="qtr-badge" id="qtrBadge">Q1 05:00</div>
+    <div class="team-col away">
+      <span class="score-num" id="scoreAway">0</span>
+      <span class="team-name away-name">AWAY</span>
+      <span class="team-badge def" id="badgeAway">DEF</span>
+    </div>
+  </div>
+
+  <!-- Compact Clocks Row -->
+  <div class="clocks-row">
+    <div class="clock-card">
+      <div class="clock-meta">
+        <span class="clock-label" id="gameClockLabel">Game Clock (5m)</span>
+        <span class="clock-display" id="gameClock">05:00</span>
+      </div>
+      <button class="btn-clock-action" id="btnToggleGameClock">Start</button>
+    </div>
+    <div class="clock-card">
+      <div class="clock-meta">
+        <span class="clock-label">Play Clock</span>
+        <span class="clock-display play" id="playClock">:30</span>
+      </div>
+      <button class="btn-clock-action" id="btnResetPlayClock">:30</button>
+    </div>
+  </div>
+
+  <!-- Down & Situation Bar -->
+  <div class="down-bar">
+    <div class="down-header-line">
+      <span class="down-tag" id="downTag">1st & 10</span>
+      <span class="loc-tag" id="locTag">Ball on Own 20 • ➔ Driving Right</span>
+    </div>
+    <div class="down-quick-actions">
+      <button class="btn-situation to" id="btnTriggerTurnover">🔄 Turnover</button>
+      <button class="btn-situation punt" id="btnTriggerPunt">👟 Punt</button>
+      <button class="btn-situation fg" id="btnTriggerFG">🎯 Field Goal</button>
+      <button class="btn-situation reset" id="btnForceFirstDown">🚩 1st & 10</button>
+    </div>
+  </div>
+
+  <!-- Mathematical SVG Football Field -->
+  <div class="field-card">
+    <div class="field-card-header">
+      <span id="driveIndicator">HOME DRIVE ➔</span>
+      <span>100-YARD GRIDIRON</span>
+    </div>
+    <div class="svg-field-wrap">
+      <svg id="fieldSvg" viewBox="0 0 1200 240" preserveAspectRatio="none">
+        <defs>
+          <pattern id="homePattern" width="20" height="20" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="20" stroke="#1e3a8a" stroke-width="8" />
+            <line x1="10" y1="0" x2="10" y2="20" stroke="#1d4ed8" stroke-width="8" />
+          </pattern>
+          <pattern id="awayPattern" width="20" height="20" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0" x2="0" y2="20" stroke="#991b1b" stroke-width="8" />
+            <line x1="10" y1="0" x2="10" y2="20" stroke="#b91c1c" stroke-width="8" />
+          </pattern>
+        </defs>
+
+        <!-- Alternating 5-Yard Grass Stripes from Yard 0 to 100 (x: 100 to 1100) -->
+        <g id="grassStripes">
+          <rect x="100" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="150" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="200" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="250" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="300" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="350" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="400" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="450" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="500" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="550" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="600" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="650" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="700" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="750" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="800" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="850" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="900" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="950" y="0" width="50" height="240" fill="#166534"/>
+          <rect x="1000" y="0" width="50" height="240" fill="#15803d"/>
+          <rect x="1050" y="0" width="50" height="240" fill="#166534"/>
+        </g>
+
+        <!-- Endzones -->
+        <rect x="0" y="0" width="100" height="240" fill="url(#homePattern)"/>
+        <text x="50" y="125" fill="#ffffff" font-size="28" font-weight="900" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 50 125)" opacity="0.85" letter-spacing="4">HOME</text>
+
+        <rect x="1100" y="0" width="100" height="240" fill="url(#awayPattern)"/>
+        <text x="1150" y="125" fill="#ffffff" font-size="28" font-weight="900" text-anchor="middle" dominant-baseline="middle" transform="rotate(90 1150 125)" opacity="0.85" letter-spacing="4">AWAY</text>
+
+        <!-- Goal Lines -->
+        <line x1="100" y1="0" x2="100" y2="240" stroke="#ffffff" stroke-width="6"/>
+        <line x1="1100" y1="0" x2="1100" y2="240" stroke="#ffffff" stroke-width="6"/>
+
+        <!-- 5-Yard Thin Lines -->
+        <g stroke="rgba(255,255,255,0.3)" stroke-width="2" stroke-dasharray="4 4">
+          <line x1="150" y1="0" x2="150" y2="240"/>
+          <line x1="250" y1="0" x2="250" y2="240"/>
+          <line x1="350" y1="0" x2="350" y2="240"/>
+          <line x1="450" y1="0" x2="450" y2="240"/>
+          <line x1="550" y1="0" x2="550" y2="240"/>
+          <line x1="650" y1="0" x2="650" y2="240"/>
+          <line x1="750" y1="0" x2="750" y2="240"/>
+          <line x1="850" y1="0" x2="850" y2="240"/>
+          <line x1="950" y1="0" x2="950" y2="240"/>
+          <line x1="1050" y1="0" x2="1050" y2="240"/>
+        </g>
+
+        <!-- 10-Yard Major Solid Lines -->
+        <g stroke="#ffffff" stroke-width="3">
+          <line x1="200" y1="0" x2="200" y2="240"/>
+          <line x1="300" y1="0" x2="300" y2="240"/>
+          <line x1="400" y1="0" x2="400" y2="240"/>
+          <line x1="500" y1="0" x2="500" y2="240"/>
+          <line x1="600" y1="0" x2="600" y2="240"/>
+          <line x1="700" y1="0" x2="700" y2="240"/>
+          <line x1="800" y1="0" x2="800" y2="240"/>
+          <line x1="900" y1="0" x2="900" y2="240"/>
+          <line x1="1000" y1="0" x2="1000" y2="240"/>
+        </g>
+
+        <!-- Hash Marks -->
+        <g stroke="#ffffff" stroke-width="2">
+          <!-- Top Row -->
+          <line x1="200" y1="55" x2="200" y2="65"/><line x1="300" y1="55" x2="300" y2="65"/>
+          <line x1="400" y1="55" x2="400" y2="65"/><line x1="500" y1="55" x2="500" y2="65"/>
+          <line x1="600" y1="55" x2="600" y2="65"/><line x1="700" y1="55" x2="700" y2="65"/>
+          <line x1="800" y1="55" x2="800" y2="65"/><line x1="900" y1="55" x2="900" y2="65"/>
+          <line x1="1000" y1="55" x2="1000" y2="65"/>
+          <!-- Bottom Row -->
+          <line x1="200" y1="175" x2="200" y2="185"/><line x1="300" y1="175" x2="300" y2="185"/>
+          <line x1="400" y1="175" x2="400" y2="185"/><line x1="500" y1="175" x2="500" y2="185"/>
+          <line x1="600" y1="175" x2="600" y2="185"/><line x1="700" y1="175" x2="700" y2="185"/>
+          <line x1="800" y1="175" x2="800" y2="185"/><line x1="900" y1="175" x2="900" y2="185"/>
+          <line x1="1000" y1="175" x2="1000" y2="185"/>
+        </g>
+
+        <!-- Yard Numbers -->
+        <g font-size="20" font-weight="900" fill="rgba(255,255,255,0.75)" text-anchor="middle">
+          <!-- Bottom Sideline Numbers -->
+          <text x="200" y="222">10</text><text x="300" y="222">20</text><text x="400" y="222">30</text><text x="500" y="222">40</text>
+          <text x="600" y="222">50</text>
+          <text x="700" y="222">40</text><text x="800" y="222">30</text><text x="900" y="222">20</text><text x="1000" y="222">10</text>
+          <!-- Top Sideline Numbers (Rotated) -->
+          <text x="200" y="25" transform="rotate(180 200 20)">10</text>
+          <text x="300" y="25" transform="rotate(180 300 20)">20</text>
+          <text x="400" y="25" transform="rotate(180 400 20)">30</text>
+          <text x="500" y="25" transform="rotate(180 500 20)">40</text>
+          <text x="600" y="25" transform="rotate(180 600 20)">50</text>
+          <text x="700" y="25" transform="rotate(180 700 20)">40</text>
+          <text x="800" y="25" transform="rotate(180 800 20)">30</text>
+          <text x="900" y="25" transform="rotate(180 900 20)">20</text>
+          <text x="1000" y="25" transform="rotate(180 1000 20)">10</text>
+        </g>
+
+        <!-- First Down Line (Gold) -->
+        <g id="svgFirstDownGroup" transform="translate(400, 0)">
+          <line x1="0" y1="0" x2="0" y2="240" stroke="#fbbf24" stroke-width="6" stroke-linecap="round"/>
+          <polygon points="-12,0 12,0 0,16" fill="#fbbf24"/>
+          <text x="0" y="32" fill="#000000" font-size="12" font-weight="900" text-anchor="middle">1ST</text>
+        </g>
+
+        <!-- Line Of Scrimmage & Football (Cyan) -->
+        <g id="svgLosGroup" transform="translate(300, 0)">
+          <line x1="0" y1="0" x2="0" y2="240" stroke="#38bdf8" stroke-width="5" stroke-dasharray="10 4"/>
+          <circle cx="0" cy="120" r="22" fill="#0369a1" stroke="#ffffff" stroke-width="3"/>
+          <text x="0" y="125" font-size="20" text-anchor="middle" dominant-baseline="middle">🏈</text>
+          <rect x="-24" y="152" width="48" height="18" rx="4" fill="#38bdf8"/>
+          <text id="svgLosText" x="0" y="165" fill="#000000" font-size="10" font-weight="900" text-anchor="middle">LOS ➔</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="scrubber-wrap">
+      <span>Scrub:</span>
+      <input type="range" id="ballScrubber" min="0" max="100" value="20">
+      <span id="scrubberYardVal" style="width: 38px; text-align: right;">20 yd</span>
+    </div>
+  </div>
+
+  <!-- Quick Yardage Apply Grid (-10 to +15) -->
+  <div class="quick-section">
+    <div class="quick-title-bar">
+      <span>⚡ Quick Yardage Apply</span>
+      <span>Tap integer to resolve</span>
+    </div>
+
+    <!-- Losses (-10 to -1) -->
+    <div class="quick-grid-row row-losses">
+      <button class="btn-yard btn-loss" data-yard="-10">-10</button>
+      <button class="btn-yard btn-loss" data-yard="-9">-9</button>
+      <button class="btn-yard btn-loss" data-yard="-8">-8</button>
+      <button class="btn-yard btn-loss" data-yard="-7">-7</button>
+      <button class="btn-yard btn-loss" data-yard="-6">-6</button>
+      <button class="btn-yard btn-loss" data-yard="-5">-5</button>
+      <button class="btn-yard btn-loss" data-yard="-4">-4</button>
+      <button class="btn-yard btn-loss" data-yard="-3">-3</button>
+      <button class="btn-yard btn-loss" data-yard="-2">-2</button>
+      <button class="btn-yard btn-loss" data-yard="-1">-1</button>
+    </div>
+
+    <!-- Gains (0 to +15) -->
+    <div class="quick-grid-row row-gains">
+      <button class="btn-yard btn-inc" data-yard="0">0 (Inc)</button>
+      <button class="btn-yard btn-gain" data-yard="1">+1</button>
+      <button class="btn-yard btn-gain" data-yard="2">+2</button>
+      <button class="btn-yard btn-gain" data-yard="3">+3</button>
+      <button class="btn-yard btn-gain" data-yard="4">+4</button>
+      <button class="btn-yard btn-gain" data-yard="5">+5</button>
+      <button class="btn-yard btn-gain" data-yard="6">+6</button>
+      <button class="btn-yard btn-gain" data-yard="7">+7</button>
+      <button class="btn-yard btn-gain" data-yard="8">+8</button>
+      <button class="btn-yard btn-gain" data-yard="9">+9</button>
+      <button class="btn-yard btn-firstdown-yard" data-yard="10">+10</button>
+      <button class="btn-yard btn-gain" data-yard="11">+11</button>
+      <button class="btn-yard btn-gain" data-yard="12">+12</button>
+      <button class="btn-yard btn-gain" data-yard="13">+13</button>
+      <button class="btn-yard btn-gain" data-yard="14">+14</button>
+      <button class="btn-yard btn-gain" data-yard="15">+15</button>
+    </div>
+
+    <!-- Big Play Calc Button Directly Below -->
+    <button class="btn-open-calc" id="btnOpenPlayCalc">
+      🃏 Open Play Calc (v4 Mechanics: Joker=Ace, Q+A=11y, K+Joker) &rarr;
+    </button>
+  </div>
+
+  <!-- Live Status Footer -->
+  <div class="status-alert" id="statusMsg">
+    <span>📢</span> <span id="statusText">Ready for snap. Max 3 cards per play. Max 12 in hand.</span>
+  </div>
+</div>
+
+<!-- ================= DELAY OF GAME MODAL ================= -->
+<div class="modal-backdrop" id="modalDelayOfGame">
+  <div class="modal-card" style="text-align: center; border: 2px solid var(--warning);">
+    <div style="font-size: 32px;">⏱️ ⚠️</div>
+    <div style="font-size: 20px; font-weight: 900; color: var(--warning);">DELAY OF GAME!</div>
+    <div style="font-size: 13px; color: #cbd5e1; line-height: 1.4;">
+      The 30-second play clock reached <strong>:00</strong> before the offense called "HIKE" and laid down cards.
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+      <button class="btn-open-calc" id="btnEnforceDelayPenalty" style="background: #991b1b; box-shadow: none;">
+        🚩 Enforce 5-Yard Penalty
+      </button>
+      <button class="btn-situation" id="btnWaveOffDelay" style="padding: 10px; background: #334155; color: white;">
+        They Got Play Off (Wave Off)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NEW GAME / QUARTER SETUP MODAL ================= -->
+<div class="modal-backdrop" id="modalNewGame">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Game Clock & Quarter Setup</div>
+      <button class="btn-close" id="btnCloseNewGameModal">&times;</button>
+    </div>
+
+    <div style="font-size: 13px; color: var(--text-muted);">
+      Choose the quarter duration for this match:
+    </div>
+
+    <div class="pill-group" id="quarterLengthPills">
+      <button class="pill-btn" data-mins="3">3 Minutes</button>
+      <button class="pill-btn active" data-mins="5">5 Minutes</button>
+      <button class="pill-btn" data-mins="7">7 Minutes</button>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+      <button class="btn-open-calc" id="btnApplyQuarterLenOnly" style="background: #2563eb;">
+        Apply Quarter Length
+      </button>
+      <button class="btn-open-calc" id="btnConfirmResetNewGame" style="background: #991b1b;">
+        🔄 Reset New Game (0 - 0, Q1)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SCORE ADJUST MODAL ================= -->
+<div class="modal-backdrop" id="modalScoreAdjust">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Adjust Score & Quarter</div>
+      <button class="btn-close" id="btnCloseScoreModal">&times;</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <div class="calc-team-block">
+        <div class="calc-team-title" style="color: var(--home);">HOME SCORE</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+          <button class="btn-situation" data-add-home="6">+6 TD</button>
+          <button class="btn-situation" data-add-home="3">+3 FG</button>
+          <button class="btn-situation" data-add-home="1">+1 XP</button>
+          <button class="btn-situation" data-add-home="2">+2 PT</button>
+          <button class="btn-situation" data-add-home="-1" style="grid-column: span 2; background: #334155;">-1 Point</button>
+        </div>
+      </div>
+
+      <div class="calc-team-block">
+        <div class="calc-team-title" style="color: var(--away);">AWAY SCORE</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+          <button class="btn-situation" data-add-away="6">+6 TD</button>
+          <button class="btn-situation" data-add-away="3">+3 FG</button>
+          <button class="btn-situation" data-add-away="1">+1 XP</button>
+          <button class="btn-situation" data-add-away="2">+2 PT</button>
+          <button class="btn-situation" data-add-away="-1" style="grid-column: span 2; background: #334155;">-1 Point</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button class="btn-situation reset" id="btnNextQuarterModal" style="flex: 1; padding: 10px;">Advance Quarter &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PLAY CALCULATOR MODAL (v4 DYNAMICS) ================= -->
+<div class="modal-backdrop" id="modalPlayCalc">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Play Calculator (v4 Balance)</div>
+      <button class="btn-close" id="btnClosePlayCalc">&times;</button>
+    </div>
+
+    <div class="rule-box" style="font-size: 11px;">
+      <strong>v4 Balance Rules:</strong><br>
+      • Def Ace / Solo Joker: Always <strong>11y</strong> (Triggers Sack Cap to -10y).<br>
+      • Off Ace / Solo Joker: <strong>11y</strong> if paired with Queen, else <strong>5y</strong>.<br>
+      • K + Joker: Defense = Turnover (unless Offense plays King). Offense = +15y Penalty & 1st Down.<br>
+      • Non-Ace Losses: Clamped at <strong>-5y</strong>.
+    </div>
+
+    <!-- Offense Selection -->
+    <div class="calc-team-block">
+      <div class="calc-team-title">
+        <span id="labelOffenseCount">Offense Cards (0/3)</span>
+        <button class="btn-header" id="btnClearOffense">Clear</button>
+      </div>
+      <div class="selected-chips" id="chipsOffense"></div>
+      <div class="calc-keyboard-big" id="keysOffense">
+        <button class="btn-calc-key" data-type="num" data-val="2">2</button>
+        <button class="btn-calc-key" data-type="num" data-val="3">3</button>
+        <button class="btn-calc-key" data-type="num" data-val="4">4</button>
+        <button class="btn-calc-key" data-type="num" data-val="5">5</button>
+        <button class="btn-calc-key" data-type="num" data-val="6">6</button>
+        <button class="btn-calc-key" data-type="num" data-val="7">7</button>
+        <button class="btn-calc-key" data-type="num" data-val="8">8</button>
+        <button class="btn-calc-key" data-type="num" data-val="9">9</button>
+        <button class="btn-calc-key" data-type="num" data-val="10">10</button>
+        <button class="btn-calc-key" data-type="jack" data-val="10">J (10)</button>
+        <button class="btn-calc-key" data-type="queen" data-val="10" style="background: #1e3a8a; border-color: #3b82f6;">Q (10)</button>
+        <button class="btn-calc-key" data-type="king" data-val="10" style="background: #3730a3; border-color: #6366f1;">K (10)</button>
+        <button class="btn-calc-key" data-type="ace" data-val="5" style="grid-column: span 2; background: #312e81; color: #c7d2fe;">Ace (5y / 11y w/ Q)</button>
+        <button class="btn-calc-key btn-calc-joker-offense" data-type="joker" data-val="5" style="grid-column: span 2;">🃏 Joker (Ace-like / Auto 1st w/ K)</button>
+      </div>
+    </div>
+
+    <!-- Defense Selection -->
+    <div class="calc-team-block">
+      <div class="calc-team-title">
+        <span id="labelDefenseCount">Defense Cards (0/3)</span>
+        <button class="btn-header" id="btnClearDefense">Clear</button>
+      </div>
+      <div class="selected-chips" id="chipsDefense"></div>
+      <div class="calc-keyboard-big" id="keysDefense">
+        <button class="btn-calc-key" data-type="num" data-val="2">2</button>
+        <button class="btn-calc-key" data-type="num" data-val="3">3</button>
+        <button class="btn-calc-key" data-type="num" data-val="4">4</button>
+        <button class="btn-calc-key" data-type="num" data-val="5">5</button>
+        <button class="btn-calc-key" data-type="num" data-val="6">6</button>
+        <button class="btn-calc-key" data-type="num" data-val="7">7</button>
+        <button class="btn-calc-key" data-type="num" data-val="8">8</button>
+        <button class="btn-calc-key" data-type="num" data-val="9">9</button>
+        <button class="btn-calc-key" data-type="num" data-val="10">10</button>
+        <button class="btn-calc-key" data-type="jack" data-val="10">J (10)</button>
+        <button class="btn-calc-key" data-type="queen" data-val="10" style="background: #1e3a8a; border-color: #3b82f6;">Q (10)</button>
+        <button class="btn-calc-key" data-type="king" data-val="10" style="background: #3730a3; border-color: #6366f1;">K (10)</button>
+        <button class="btn-calc-key" data-type="ace" data-val="11" style="grid-column: span 2; background: #312e81; color: #c7d2fe;">Ace (11y Sledge)</button>
+        <button class="btn-calc-key btn-calc-joker" data-type="joker" data-val="11" style="grid-column: span 2;">🃏 Joker (Ace-like / Turnover w/ K)</button>
+      </div>
+    </div>
+
+    <div class="calc-summary">
+      <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">NET PLAY YARDAGE</div>
+      <div class="calc-yard-diff" id="calcDiffText">0 Yards</div>
+      <div style="font-size: 11px; font-weight: 700;" id="calcOutcomeSubtext">Select cards to resolve...</div>
+    </div>
+
+    <button class="btn-open-calc" id="btnApplyPlayCalc" style="background: var(--accent); color: #022c22;">
+      Apply Play to Field &rarr;
+    </button>
+  </div>
+</div>
+
+<!-- ================= PUNT & SAFETY FREE KICK MODAL ================= -->
+<div class="modal-backdrop" id="modalPunt">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="puntTitle">4th Down Punt</div>
+      <button class="btn-close" id="btnClosePunt">&times;</button>
+    </div>
+
+    <div class="rule-box" id="puntDesc">
+      Punting team plays 1 card (Val &times; 5y, Face = 45y, Ace = 50y). Defense plays 1 return card.
+    </div>
+
+    <div class="calc-team-block">
+      <div class="calc-team-title">
+        <span>Punting Team Card</span>
+        <button class="btn-header" id="btnPuntDrawDeck" style="background: #0284c7;">Draw Deck (Empty Hand)</button>
+      </div>
+      <div class="selected-chips" id="chipsPuntKick"></div>
+      <div class="quick-grid-row row-losses" id="keysPuntKick" style="grid-template-columns: repeat(6, 1fr);">
+        <button class="btn-calc-key" data-val="2">2 (10y)</button>
+        <button class="btn-calc-key" data-val="3">3 (15y)</button>
+        <button class="btn-calc-key" data-val="4">4 (20y)</button>
+        <button class="btn-calc-key" data-val="5">5 (25y)</button>
+        <button class="btn-calc-key" data-val="6">6 (30y)</button>
+        <button class="btn-calc-key" data-val="7">7 (35y)</button>
+        <button class="btn-calc-key" data-val="8">8 (40y)</button>
+        <button class="btn-calc-key" data-val="9">9 (45y)</button>
+        <button class="btn-calc-key" data-val="10">10 (50y)</button>
+        <button class="btn-calc-key" data-val="10" data-label="Face">Face (45y)</button>
+        <button class="btn-calc-key" data-val="11" data-label="Ace" style="grid-column: span 2;">Ace (50y)</button>
+      </div>
+    </div>
+
+    <div class="calc-team-block">
+      <div class="calc-team-title">
+        <span>Receiving Return Card</span>
+        <button class="btn-header" id="btnClearPuntReturn">No Return</button>
+      </div>
+      <div class="selected-chips" id="chipsPuntReturn"></div>
+      <div class="quick-grid-row row-losses" id="keysPuntReturn" style="grid-template-columns: repeat(6, 1fr);">
+        <button class="btn-calc-key" data-val="2">2y</button>
+        <button class="btn-calc-key" data-val="3">3y</button>
+        <button class="btn-calc-key" data-val="4">4y</button>
+        <button class="btn-calc-key" data-val="5">5y</button>
+        <button class="btn-calc-key" data-val="6">6y</button>
+        <button class="btn-calc-key" data-val="7">7y</button>
+        <button class="btn-calc-key" data-val="8">8y</button>
+        <button class="btn-calc-key" data-val="9">9y</button>
+        <button class="btn-calc-key" data-val="10">10y</button>
+        <button class="btn-calc-key" data-val="10" data-label="Face">Face (10y)</button>
+        <button class="btn-calc-key" data-val="11" data-label="Ace" style="grid-column: span 2;">Ace (11y)</button>
+      </div>
+    </div>
+
+    <div class="calc-summary">
+      <div style="font-size: 11px; color: var(--text-muted);">NET PUNT DISTANCE</div>
+      <div class="calc-yard-diff" id="puntNetText">0 Net Yards</div>
+    </div>
+
+    <button class="btn-open-calc" id="btnExecutePunt" style="background: #0284c7;">
+      Execute Punt & Switch Possession
+    </button>
+  </div>
+</div>
+
+<!-- ================= FIELD GOAL MODAL ================= -->
+<div class="modal-backdrop" id="modalFG">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Field Goal Attempt</div>
+      <button class="btn-close" id="btnCloseFG">&times;</button>
+    </div>
+
+    <div class="rule-box">
+      Offense draws 5 from deck + up to 3 from hand (Aces = 11y for both on FG!). Defense plays up to 2 cards (or Joker to block). Net must strictly exceed Target (Yard Line to Goal + 10).
+    </div>
+
+    <div class="calc-summary">
+      <div style="font-size: 11px; color: var(--text-muted);">TARGET YARDAGE REQUIRED</div>
+      <div class="calc-yard-diff" id="fgTargetText">45 Yards</div>
+      <div style="font-size: 11px;" id="fgMathText">Offense (0) - Defense (0) = 0 Net</div>
+    </div>
+
+    <div class="calc-team-block">
+      <div class="calc-team-title">
+        <span>Offense (Deck + Hand)</span>
+        <button class="btn-header" id="btnAutoFGDeck" style="background: #0284c7;">🎲 Auto-Draw 5 Deck</button>
+      </div>
+      <div class="selected-chips" id="chipsFGOffense"></div>
+      <div class="calc-keyboard-big" id="keysFGOffense" style="grid-template-columns: repeat(4, 1fr);">
+        <button class="btn-calc-key" data-val="2">2</button>
+        <button class="btn-calc-key" data-val="3">3</button>
+        <button class="btn-calc-key" data-val="4">4</button>
+        <button class="btn-calc-key" data-val="5">5</button>
+        <button class="btn-calc-key" data-val="6">6</button>
+        <button class="btn-calc-key" data-val="7">7</button>
+        <button class="btn-calc-key" data-val="8">8</button>
+        <button class="btn-calc-key" data-val="9">9</button>
+        <button class="btn-calc-key" data-val="10">10</button>
+        <button class="btn-calc-key" data-val="10" data-label="Face">Face (10)</button>
+        <button class="btn-calc-key" data-val="11" data-label="Ace" style="grid-column: span 2; background: #312e81; color: #c7d2fe;">Ace (11y)</button>
+        <button class="btn-calc-key btn-calc-joker-offense" data-val="25" data-label="Offense Joker (+25y)">🃏 Joker (+25 Yards Kick Boost)</button>
+      </div>
+    </div>
+
+    <div class="calc-team-block">
+      <div class="calc-team-title">
+        <span>Defense Contest (Max 2 Hand)</span>
+        <button class="btn-header" id="btnClearFGDefense">Clear</button>
+      </div>
+      <div class="selected-chips" id="chipsFGDefense"></div>
+      <div class="calc-keyboard-big" id="keysFGDefense" style="grid-template-columns: repeat(4, 1fr);">
+        <button class="btn-calc-key" data-val="2">2</button>
+        <button class="btn-calc-key" data-val="3">3</button>
+        <button class="btn-calc-key" data-val="4">4</button>
+        <button class="btn-calc-key" data-val="5">5</button>
+        <button class="btn-calc-key" data-val="6">6</button>
+        <button class="btn-calc-key" data-val="7">7</button>
+        <button class="btn-calc-key" data-val="8">8</button>
+        <button class="btn-calc-key" data-val="9">9</button>
+        <button class="btn-calc-key" data-val="10">10</button>
+        <button class="btn-calc-key" data-val="10" data-label="Face">Face (10)</button>
+        <button class="btn-calc-key" data-val="11" data-label="Ace" style="grid-column: span 2; background: #312e81; color: #c7d2fe;">Ace (11y)</button>
+        <button class="btn-calc-key btn-calc-joker" data-val="JOKER" data-label="Joker" style="grid-column: span 4;">🃏 Joker (Blocked Kick)</button>
+      </div>
+    </div>
+
+    <button class="btn-open-calc" id="btnResolveFG" style="background: #d97706;">
+      Resolve Field Goal
+    </button>
+  </div>
+</div>
+
+<!-- ================= DEDICATED FIELD GOAL MADE MODAL ================= -->
+<div class="modal-backdrop" id="modalFGMade">
+  <div class="modal-card" style="text-align: center;">
+    <div style="font-size: 34px;">🎯 🥅</div>
+    <div style="font-size: 22px; font-weight: 900; color: var(--gold);">FIELD GOAL IS GOOD! (+3)</div>
+    <div style="font-size: 13px; color: var(--text-muted);" id="fgMadeDetail">
+      3 Points awarded to kicking team. Proceed directly to kickoff:
+    </div>
+
+    <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px;">
+      <div style="font-size: 12px; font-weight: 800; margin-bottom: 8px;">KICKOFF TO OPPONENT</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-situation" id="btnFGKickTouchback" style="flex: 1; padding: 12px;">Touchback (Own 25)</button>
+        <button class="btn-situation" id="btnFGKickReturnDeck" style="flex: 1; padding: 12px; background: #047857; color: white;">Flip 4-Card Return</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TOUCHDOWN & PAT WORKFLOW MODAL ================= -->
+<div class="modal-backdrop" id="modalTD">
+  <div class="modal-card" style="text-align: center;">
+    <div style="font-size: 34px;">🏈 🏆</div>
+    <div style="font-size: 24px; font-weight: 900; color: var(--gold);">TOUCHDOWN! (+6)</div>
+    <div style="font-size: 13px; color: var(--text-muted);">Choose your Point After Touchdown (PAT) attempt:</div>
+
+    <div style="display: flex; gap: 8px; margin-top: 6px;">
+      <button class="btn-situation" id="btnSelectPAT1" style="flex: 1; padding: 10px; background: #0369a1; color: white;">
+        1-Point Kick<br><span style="font-size: 10px; font-weight: normal;">Flip top card (4+ Good)</span>
+      </button>
+      <button class="btn-situation" id="btnSelectPAT2" style="flex: 1; padding: 10px; background: #6d28d9; color: white;">
+        2-Point Try<br><span style="font-size: 10px; font-weight: normal;">1 Card Snap (Off &gt; Def)</span>
+      </button>
+    </div>
+
+    <!-- Confirmation Area -->
+    <div id="patConfirmBox" style="display: none; background: #020617; border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 8px;">
+      <div id="patPromptText" style="font-size: 13px; font-weight: 800; margin-bottom: 8px;">Was the kick / 2-pt conversion good?</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-situation" id="btnConfirmPATSuccess" style="flex: 1; background: #065f46; color: #a7f3d0; padding: 8px;">
+          ✅ Good / Success
+        </button>
+        <button class="btn-situation" id="btnConfirmPATFail" style="flex: 1; background: #7f1d1d; color: #fecaca; padding: 8px;">
+          ❌ No Good / Failed
+        </button>
+      </div>
+    </div>
+
+    <!-- Kickoff Next Step -->
+    <div id="kickoffBox" style="display: none; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 8px;">
+      <div style="font-size: 12px; font-weight: 800; margin-bottom: 6px;">NEXT: KICKOFF TO OPPONENT</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-situation" id="btnTDKickTouchback" style="flex: 1; padding: 10px;">Touchback (Own 25)</button>
+        <button class="btn-situation" id="btnTDKickReturnDeck" style="flex: 1; padding: 10px; background: #047857; color: white;">Flip 4-Card Return</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= FIRST DOWN / DEAL PROMPT MODAL ================= -->
+<div class="modal-backdrop" id="modalDeal">
+  <div class="modal-card" style="text-align: center;">
+    <div style="font-size: 26px; font-weight: 900; color: var(--gold);" id="dealTitle">FIRST DOWN! 🔔</div>
+    <div class="rule-box" style="margin: 10px 0;" id="dealBody">
+      Deal <strong>+7 Cards</strong> to Offense &amp; <strong>+5 Cards</strong> to Defense.<br>
+      Hold your unused cards! (Max hand cap: 12 cards).
+    </div>
+    <button class="btn-open-calc" id="btnResumeAfterDeal" style="background: var(--accent); color: #022c22;">
+      Hands Dealt &bull; Resume Game &rarr;
+    </button>
+  </div>
+</div>
+
+<!-- ================= RULES MODAL ================= -->
+<div class="modal-backdrop" id="modalRules">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Deck Football Rulebook</div>
+      <button class="btn-close" id="btnCloseRules">&times;</button>
+    </div>
+    <div class="rules-scroll">
+      <h4>1. Deck Setup &amp; Deal Quantities</h4>
+      <ul>
+        <li>Standard 52-card deck + 2 Jokers (54 cards total).</li>
+        <li><strong>Fresh Drive Deal:</strong> Offense receives <strong>8 cards</strong>; Defense receives <strong>5 cards</strong>.</li>
+        <li><strong>First Down Deal:</strong> Offense adds <strong>+7 cards</strong>; Defense adds <strong>+5 cards</strong>. (Cards accumulate across downs!).</li>
+        <li><strong>Hand Cap:</strong> Maximum <strong>12 cards</strong> held at any time. Any excess cards drawn beyond 12 must be discarded immediately.</li>
+      </ul>
+
+      <h4>2. Empty Hand Rule</h4>
+      <ul>
+        <li>If a player runs completely out of cards mid-drive, they must play subsequent downs with <strong>0 cards (0 yards)</strong>.</li>
+        <li>If Offense is empty, any card Defense plays becomes a loss / sack for that amount.</li>
+        <li>If Defense is empty, whatever Offense plays is unopposed yardage.</li>
+        <li><strong>Punting Exception:</strong> If punting with an empty hand, draw 1 card from the deck. If a <strong>Joker</strong> is drawn, it is a muffed punt resulting in an immediate turnover right at the spot of the kick.</li>
+      </ul>
+
+      <h4>3. Card Values &amp; Combos (v4 Rules)</h4>
+      <ul>
+        <li><strong>Numbers (2–10):</strong> Face value (2 to 10 yards).</li>
+        <li><strong>Face Cards (J, Q, K):</strong> Worth <strong>10 yards</strong> each.</li>
+        <li><strong>Defensive Aces:</strong> Permanently worth <strong>11 yards</strong>.</li>
+        <li><strong>Offensive Aces:</strong> Worth <strong>11 yards</strong> if paired with a <strong>Queen</strong>; otherwise worth <strong>5 yards</strong>.</li>
+        <li><strong>Solo Jokers (Ace-Like):</strong> An unpaired Joker acts as an Ace for that player:
+          <ul>
+            <li><strong>Defense:</strong> Worth <strong>11 yards</strong> (can trigger the -10 yard sack cap).</li>
+            <li><strong>Offense:</strong> Worth <strong>11 yards</strong> if paired with a Queen; otherwise <strong>5 yards</strong>.</li>
+          </ul>
+        </li>
+        <li><strong>Defensive Joker + King (Turnover):</strong> Causes an immediate <strong>Turnover</strong> UNLESS Offense also plays a King to protect the ball.</li>
+        <li><strong>Offensive Joker + King (Penalty):</strong> Triggers an automatic <strong>+15 Yards &amp; 1st Down</strong> penalty!</li>
+      </ul>
+
+      <h4>4. Tackle for Loss Clamping</h4>
+      <ul>
+        <li>Losses on standard downs are clamped at <strong>-5 Yards</strong>.</li>
+        <li>If the Defense plays an <strong>Ace</strong> or a <strong>Solo Joker</strong> (acting as an 11-point Ace), the sack cap extends down to <strong>-10 Yards</strong>.</li>
+      </ul>
+
+      <h4>5. Special Teams</h4>
+      <ul>
+        <li>On Field Goals and Punts, Aces are worth <strong>11 yards</strong> for both teams.</li>
+      </ul>
+
+      <h4>6. Delay of Game</h4>
+      <ul>
+        <li>Offense has 30 seconds to call "HIKE" and lay down cards.</li>
+        <li>If the play clock reaches <strong>:00</strong>, a 5-yard penalty is enforced, game clock stops, and play clock resets to :30.</li>
+      </ul>
+
+      <h4>7. Safeties &amp; Free Kicks</h4>
+      <ul>
+        <li>If a negative play pushes the ball backward into the offense's own endzone, the defense scores a <strong>Safety (+2 Points)</strong>.</li>
+        <li>The team that conceded the safety must perform a <strong>Free Kick from their own 20-yard line</strong> using standard punt rules.</li>
+      </ul>
+
+      <h4>8. Halftime Discard &amp; Reshuffle</h4>
+      <ul>
+        <li>Hands are maintained across all 1st downs and drives throughout each half.</li>
+        <li>Hands are <strong>only completely wiped clean and discarded at Halftime (end of Q2)</strong>, reshuffling the entire 54-card deck for Q3.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Game State
+  const state = {
+    homeScore: 0,
+    awayScore: 0,
+    possession: 'home', // 'home' or 'away'
+    ballYard: 20, // 0 to 100 on gridiron (0 = Home Goal, 100 = Away Goal)
+    down: 1,
+    lineGain: 30,
+    quarter: 1,
+    quarterMinutes: 5, // 3, 5, or 7 mins
+    gameSeconds: 300,
+    playSeconds: 30,
+    gameClockRunning: false,
+    playClockRunning: false,
+    wasGameClockRunningBeforeModal: false,
+    wasPlayClockRunningBeforeModal: false,
+    activeModalsCount: 0,
+    gameTimer: null,
+    playTimer: null,
+    // Calculator selection buffers
+    offenseCards: [],
+    defenseCards: [],
+    // Punt buffers
+    puntKickCard: null,
+    puntReturnCard: null,
+    isSafetyFreeKick: false,
+    // FG buffers
+    fgOffenseCards: [],
+    fgDefenseCards: [],
+    // Pending PAT
+    pendingPATPoints: 1
+  };
+
+  // Web Audio Synthesizer
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function playTone(freq, dur, type = 'sine') {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    } catch(e) {}
+  }
+
+  function soundWhistle() {
+    playTone(2400, 0.12, 'triangle');
+    setTimeout(() => playTone(2600, 0.2, 'triangle'), 100);
+  }
+
+  function soundBuzzer() {
+    playTone(140, 0.6, 'sawtooth');
+  }
+
+  function soundScore() {
+    [523, 659, 783, 1046].forEach((f, i) => {
+      setTimeout(() => playTone(f, 0.18, 'sine'), i * 80);
+    });
+  }
+
+  // DOM Handles
+  const elScoreHome = document.getElementById('scoreHome');
+  const elScoreAway = document.getElementById('scoreAway');
+  const elBadgeHome = document.getElementById('badgeHome');
+  const elBadgeAway = document.getElementById('badgeAway');
+  const elQtrBadge = document.getElementById('qtrBadge');
+  const elGameClock = document.getElementById('gameClock');
+  const elGameClockLabel = document.getElementById('gameClockLabel');
+  const elPlayClock = document.getElementById('playClock');
+  const elDownTag = document.getElementById('downTag');
+  const elLocTag = document.getElementById('locTag');
+  const elDriveIndicator = document.getElementById('driveIndicator');
+  const elBallScrubber = document.getElementById('ballScrubber');
+  const elScrubberYardVal = document.getElementById('scrubberYardVal');
+  const svgLosGroup = document.getElementById('svgLosGroup');
+  const svgFirstDownGroup = document.getElementById('svgFirstDownGroup');
+  const svgLosText = document.getElementById('svgLosText');
+  const elStatusText = document.getElementById('statusText');
+
+  // Time Utilities
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  function startGameClock() {
+    if (state.gameClockRunning) return;
+    state.gameClockRunning = true;
+    document.getElementById('btnToggleGameClock').textContent = 'Pause';
+    state.gameTimer = setInterval(() => {
+      if (state.gameSeconds > 0) {
+        state.gameSeconds--;
+        elGameClock.textContent = formatTime(state.gameSeconds);
+        elQtrBadge.textContent = `Q${state.quarter} ${formatTime(state.gameSeconds)}`;
+      } else {
+        pauseGameClock();
+        pausePlayClock();
+        soundBuzzer();
+        advanceQuarter();
+      }
+    }, 1000);
+  }
+
+  function pauseGameClock() {
+    state.gameClockRunning = false;
+    clearInterval(state.gameTimer);
+    document.getElementById('btnToggleGameClock').textContent = 'Start';
+  }
+
+  function pausePlayClock() {
+    state.playClockRunning = false;
+    clearInterval(state.playTimer);
+  }
+
+  function resumePlayClock() {
+    if (state.playClockRunning) return;
+    state.playClockRunning = true;
+    clearInterval(state.playTimer);
+    state.playTimer = setInterval(() => {
+      if (state.playSeconds > 0) {
+        state.playSeconds--;
+        elPlayClock.textContent = `:${state.playSeconds.toString().padStart(2, '0')}`;
+        if (state.playSeconds === 3) playTone(750, 0.08);
+      } else {
+        clearInterval(state.playTimer);
+        state.playClockRunning = false;
+        soundBuzzer();
+        pauseGameClock();
+        openDelayOfGameModal();
+      }
+    }, 1000);
+  }
+
+  function startPlayClock() {
+    clearInterval(state.playTimer);
+    state.playSeconds = 30;
+    elPlayClock.textContent = ':30';
+    state.playClockRunning = true;
+    state.playTimer = setInterval(() => {
+      if (state.playSeconds > 0) {
+        state.playSeconds--;
+        elPlayClock.textContent = `:${state.playSeconds.toString().padStart(2, '0')}`;
+        if (state.playSeconds === 3) playTone(750, 0.08);
+      } else {
+        clearInterval(state.playTimer);
+        state.playClockRunning = false;
+        soundBuzzer();
+        pauseGameClock();
+        openDelayOfGameModal();
+      }
+    }, 1000);
+  }
+
+  // Synchronized Main Pause Button Handler
+  document.getElementById('btnToggleGameClock').addEventListener('click', () => {
+    if (state.gameClockRunning) {
+      pauseGameClock();
+      pausePlayClock();
+    } else {
+      startGameClock();
+      if (state.playSeconds > 0 && state.playSeconds < 30) {
+        resumePlayClock();
+      } else {
+        startPlayClock();
+      }
+    }
+  });
+
+  document.getElementById('btnResetPlayClock').addEventListener('click', startPlayClock);
+
+  // Universal Modal Open & Close System with Clock Pausing
+  function openModal(modalEl) {
+    if (state.activeModalsCount === 0) {
+      state.wasGameClockRunningBeforeModal = state.gameClockRunning;
+      state.wasPlayClockRunningBeforeModal = state.playClockRunning;
+      pauseGameClock();
+      pausePlayClock();
+    }
+    state.activeModalsCount++;
+    modalEl.classList.add('active');
+  }
+
+  function closeModal(modalEl, shouldResumePreviousClocks = true) {
+    if (modalEl.classList.contains('active')) {
+      modalEl.classList.remove('active');
+      state.activeModalsCount = Math.max(0, state.activeModalsCount - 1);
+    }
+    if (state.activeModalsCount === 0 && shouldResumePreviousClocks) {
+      if (state.wasGameClockRunningBeforeModal) startGameClock();
+      if (state.wasPlayClockRunningBeforeModal) resumePlayClock();
+    }
+  }
+
+  function advanceQuarter() {
+    state.quarter++;
+    if (state.quarter === 3) {
+      alert("HALFTIME! Discard both hands and reshuffle the 54-card deck.");
+    }
+    state.gameSeconds = state.quarterMinutes * 60;
+    elGameClock.textContent = formatTime(state.gameSeconds);
+    elQtrBadge.textContent = `Q${state.quarter} ${formatTime(state.gameSeconds)}`;
+  }
+
+  // Field & Coordinate Renderer
+  function updateFieldUI() {
+    elScoreHome.textContent = state.homeScore;
+    elScoreAway.textContent = state.awayScore;
+
+    const isHome = state.possession === 'home';
+    if (isHome) {
+      elBadgeHome.className = 'team-badge off';
+      elBadgeHome.textContent = 'OFF';
+      elBadgeAway.className = 'team-badge def';
+      elBadgeAway.textContent = 'DEF';
+      elDriveIndicator.textContent = 'HOME DRIVE ➔';
+      svgLosText.textContent = 'LOS ➔';
+    } else {
+      elBadgeAway.className = 'team-badge off';
+      elBadgeAway.textContent = 'OFF';
+      elBadgeHome.className = 'team-badge def';
+      elBadgeHome.textContent = 'DEF';
+      elDriveIndicator.textContent = '⬅ AWAY DRIVE';
+      svgLosText.textContent = '⬅ LOS';
+    }
+
+    const losX = 100 + (state.ballYard * 10);
+    svgLosGroup.setAttribute('transform', `translate(${losX}, 0)`);
+
+    const gainX = 100 + (Math.max(0, Math.min(100, state.lineGain)) * 10);
+    svgFirstDownGroup.setAttribute('transform', `translate(${gainX}, 0)`);
+
+    elBallScrubber.value = state.ballYard;
+    elScrubberYardVal.textContent = `${state.ballYard} yd`;
+
+    const yardsToGo = isHome ? (state.lineGain - state.ballYard) : (state.ballYard - state.lineGain);
+    const toGoStr = yardsToGo <= 0 ? 'Goal' : yardsToGo;
+
+    let spotSide = "50";
+    if (state.ballYard < 50) {
+      spotSide = isHome ? `Own ${state.ballYard}` : `Opp ${state.ballYard}`;
+    } else if (state.ballYard > 50) {
+      const opp = 100 - state.ballYard;
+      spotSide = isHome ? `Opp ${opp}` : `Own ${opp}`;
+    }
+
+    elDownTag.textContent = `${state.down}${['st','nd','rd','th'][state.down-1]} & ${toGoStr}`;
+    elLocTag.textContent = `Ball on ${spotSide} • ${isHome ? '➔ Driving Right' : '⬅ Driving Left'}`;
+  }
+
+  elBallScrubber.addEventListener('input', (e) => {
+    state.ballYard = parseInt(e.target.value);
+    updateFieldUI();
+  });
+
+  function togglePossession(spotYard = null) {
+    state.possession = state.possession === 'home' ? 'away' : 'home';
+    if (spotYard !== null) state.ballYard = spotYard;
+    state.down = 1;
+    if (state.possession === 'home') {
+      state.lineGain = Math.min(100, state.ballYard + 10);
+    } else {
+      state.lineGain = Math.max(0, state.ballYard - 10);
+    }
+    updateFieldUI();
+  }
+
+  function openDealModal(title, body) {
+    document.getElementById('dealTitle').textContent = title;
+    document.getElementById('dealBody').innerHTML = body;
+    openModal(document.getElementById('modalDeal'));
+  }
+
+  document.getElementById('btnResumeAfterDeal').addEventListener('click', () => {
+    closeModal(document.getElementById('modalDeal'), false);
+    soundWhistle();
+    startGameClock();
+    startPlayClock();
+  });
+
+  // ================= DELAY OF GAME MODAL =================
+  const modalDelay = document.getElementById('modalDelayOfGame');
+
+  function openDelayOfGameModal() {
+    openModal(modalDelay);
+    elStatusText.textContent = "⚠️ PLAY CLOCK EXPIRED! Confirm Delay of Game penalty.";
+  }
+
+  document.getElementById('btnEnforceDelayPenalty').addEventListener('click', () => {
+    closeModal(modalDelay, false);
+    const isHome = state.possession === 'home';
+    if (isHome) {
+      state.ballYard = Math.max(1, state.ballYard - 5);
+    } else {
+      state.ballYard = Math.min(99, state.ballYard + 5);
+    }
+    updateFieldUI();
+    soundBuzzer();
+    startPlayClock();
+    elStatusText.textContent = "Delay of game penalty enforced (-5 Yards). Clock paused.";
+  });
+
+  document.getElementById('btnWaveOffDelay').addEventListener('click', () => {
+    closeModal(modalDelay, false);
+    startPlayClock();
+    elStatusText.textContent = "Delay of game penalty waived off.";
+  });
+
+  // ================= SITUATION BUTTONS =================
+  document.getElementById('btnTriggerTurnover').addEventListener('click', () => {
+    soundBuzzer();
+    togglePossession();
+    openDealModal("TURNOVER! 🔄", "Ball stolen! Defense takes over.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+  });
+
+  document.getElementById('btnForceFirstDown').addEventListener('click', () => {
+    soundScore();
+    state.down = 1;
+    state.lineGain = state.possession === 'home' ? Math.min(100, state.ballYard + 10) : Math.max(0, state.ballYard - 10);
+    updateFieldUI();
+    openDealModal("FIRST DOWN! 🚩", "Reset to 1st & 10.<br>Deal <strong>+7 Cards</strong> to Offense, <strong>+5 Cards</strong> to Defense.");
+  });
+
+  // ================= RESOLVE PLAY YARDAGE =================
+  function applyPlayYardage(net) {
+    const isHome = state.possession === 'home';
+    if (isHome) state.ballYard += net;
+    else state.ballYard -= net;
+
+    // Safety Check
+    if ((isHome && state.ballYard <= 0) || (!isHome && state.ballYard >= 100)) {
+      soundBuzzer();
+      if (isHome) state.awayScore += 2;
+      else state.homeScore += 2;
+      alert("SAFETY! Defending team scores +2 Points!");
+      state.ballYard = isHome ? 20 : 80;
+      updateFieldUI();
+      openPuntModal(true);
+      return;
+    }
+
+    // Touchdown Check
+    if ((isHome && state.ballYard >= 100) || (!isHome && state.ballYard <= 0)) {
+      soundScore();
+      if (isHome) state.homeScore += 6;
+      else state.awayScore += 6;
+      updateFieldUI();
+      openTouchdownModal();
+      return;
+    }
+
+    // 1st Down Check
+    const gotFirstDown = isHome ? (state.ballYard >= state.lineGain) : (state.ballYard <= state.lineGain);
+    if (gotFirstDown) {
+      soundScore();
+      state.down = 1;
+      state.lineGain = isHome ? Math.min(100, state.ballYard + 10) : Math.max(0, state.ballYard - 10);
+      updateFieldUI();
+      openDealModal("FIRST DOWN! 🔔", "1st & 10 achieved!<br>Deal <strong>+7 Cards</strong> to Offense &amp; <strong>+5 Cards</strong> to Defense.<br>(Max 12 cards held).");
+      return;
+    }
+
+    // Down progression
+    if (state.down < 4) {
+      state.down++;
+      soundWhistle();
+      updateFieldUI();
+      startGameClock();
+      startPlayClock();
+      elStatusText.textContent = `Play logged (${net >= 0 ? '+' : ''}${net} yds). Down: ${state.down}`;
+    } else {
+      soundBuzzer();
+      togglePossession();
+      openDealModal("TURNOVER ON DOWNS! 🛑", "Offense stopped on 4th down.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+    }
+  }
+
+  // Quick Yardage Click Listeners (-10 to +15)
+  document.querySelectorAll('.btn-yard').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const y = parseInt(btn.dataset.yard);
+      applyPlayYardage(y);
+    });
+  });
+
+  // ================= PLAY CALCULATOR (v4 RULES) =================
+  const modalPlayCalc = document.getElementById('modalPlayCalc');
+  const chipsOffense = document.getElementById('chipsOffense');
+  const chipsDefense = document.getElementById('chipsDefense');
+  const calcDiffText = document.getElementById('calcDiffText');
+  const calcOutcomeSubtext = document.getElementById('calcOutcomeSubtext');
+  const btnApplyPlayCalc = document.getElementById('btnApplyPlayCalc');
+
+  document.getElementById('btnOpenPlayCalc').addEventListener('click', () => {
+    state.offenseCards = [];
+    state.defenseCards = [];
+    renderCalcChips();
+    openModal(modalPlayCalc);
+  });
+
+  document.getElementById('btnClosePlayCalc').addEventListener('click', () => {
+    closeModal(modalPlayCalc, true);
+  });
+
+  function renderCalcChips() {
+    chipsOffense.innerHTML = '';
+    state.offenseCards.forEach((c, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `${c.label || c.type.toUpperCase()} ✕`;
+      chip.onclick = () => {
+        state.offenseCards.splice(idx, 1);
+        renderCalcChips();
+      };
+      chipsOffense.appendChild(chip);
+    });
+    document.getElementById('labelOffenseCount').textContent = `Offense Cards (${state.offenseCards.length}/3)`;
+
+    chipsDefense.innerHTML = '';
+    state.defenseCards.forEach((c, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `${c.label || c.type.toUpperCase()} ✕`;
+      chip.onclick = () => {
+        state.defenseCards.splice(idx, 1);
+        renderCalcChips();
+      };
+      chipsDefense.appendChild(chip);
+    });
+    document.getElementById('labelDefenseCount').textContent = `Defense Cards (${state.defenseCards.length}/3)`;
+
+    const hasOffJoker = state.offenseCards.some(c => c.type === 'joker');
+    const hasOffKing = state.offenseCards.some(c => c.type === 'king');
+    const hasOffQueen = state.offenseCards.some(c => c.type === 'queen');
+
+    const hasDefJoker = state.defenseCards.some(c => c.type === 'joker');
+    const hasDefKing = state.defenseCards.some(c => c.type === 'king');
+    const hasDefAce = state.defenseCards.some(c => c.type === 'ace');
+
+    // Rule 2: Offensive Joker + King = +15y & Automatic 1st Down
+    if (hasOffJoker && hasOffKing) {
+      calcDiffText.textContent = "+15 YDS & 1ST DOWN";
+      calcDiffText.style.color = "var(--gold)";
+      calcOutcomeSubtext.textContent = "Offense played Joker + King! Major penalty (Pass Interference). Auto 1st Down!";
+      btnApplyPlayCalc.textContent = "Enforce +15y Penalty & 1st Down 🚩";
+      btnApplyPlayCalc.style.background = "var(--gain)";
+      btnApplyPlayCalc.style.color = "#ffffff";
+      return;
+    }
+
+    // Rule 1: Defensive Joker + King = Turnover UNLESS Offense plays King
+    if (hasDefJoker && hasDefKing) {
+      if (hasOffKing) {
+        calcOutcomeSubtext.textContent = "Turnover Blocked! Offense King protected against Defense Joker+King!";
+      } else {
+        calcDiffText.textContent = "TURNOVER!";
+        calcDiffText.style.color = "var(--away)";
+        calcOutcomeSubtext.textContent = "Defense played Joker + King! No Offensive King to block. Turnover!";
+        btnApplyPlayCalc.textContent = "Confirm Turnover 🔄";
+        btnApplyPlayCalc.style.background = "var(--away)";
+        btnApplyPlayCalc.style.color = "#ffffff";
+        return;
+      }
+    }
+
+    // Rule 3 & 4: Offense Evaluation (Aces and Solo Jokers act as Ace: 11y w/ Queen, else 5y)
+    let offSum = 0;
+    state.offenseCards.forEach(c => {
+      if (c.type === 'ace' || c.type === 'joker') {
+        offSum += hasOffQueen ? 11 : 5;
+      } else {
+        offSum += Number(c.val);
+      }
+    });
+
+    // Rule 3 & 4: Defense Evaluation (Aces and Solo Jokers act as Ace: 11y)
+    let defSum = 0;
+    state.defenseCards.forEach(c => {
+      if (c.type === 'ace' || c.type === 'joker') {
+        defSum += 11;
+      } else {
+        defSum += Number(c.val);
+      }
+    });
+
+    let rawDiff = offSum - defSum;
+    let net = rawDiff;
+
+    // Rule 6: TFL Clamping (-5 normally, -10 if Def Ace or Def Solo Joker played)
+    const defTriggeredAceSack = hasDefAce || hasDefJoker;
+    if (rawDiff < 0) {
+      const cap = defTriggeredAceSack ? -10 : -5;
+      net = Math.max(cap, rawDiff);
+    }
+
+    calcDiffText.textContent = `${net >= 0 ? '+' : ''}${net} Yards`;
+    calcDiffText.style.color = net >= 0 ? "var(--gold)" : "var(--away)";
+    btnApplyPlayCalc.textContent = "Apply Play to Field \u2192";
+    btnApplyPlayCalc.style.background = "var(--accent)";
+    btnApplyPlayCalc.style.color = "#022c22";
+
+    let detailStr = `Offense: ${offSum} yds | Defense: ${defSum} yds`;
+    if (rawDiff < 0 && net !== rawDiff) {
+      detailStr += ` (Clamped to ${net}y)`;
+    }
+    calcOutcomeSubtext.textContent = detailStr;
+  }
+
+  document.querySelectorAll('#keysOffense .btn-calc-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.offenseCards.length >= 3) return;
+      state.offenseCards.push({
+        type: btn.dataset.type,
+        val: btn.dataset.val,
+        label: btn.textContent
+      });
+      renderCalcChips();
+    });
+  });
+
+  document.querySelectorAll('#keysDefense .btn-calc-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.defenseCards.length >= 3) return;
+      state.defenseCards.push({
+        type: btn.dataset.type,
+        val: btn.dataset.val,
+        label: btn.textContent
+      });
+      renderCalcChips();
+    });
+  });
+
+  document.getElementById('btnClearOffense').addEventListener('click', () => {
+    state.offenseCards = [];
+    renderCalcChips();
+  });
+
+  document.getElementById('btnClearDefense').addEventListener('click', () => {
+    state.defenseCards = [];
+    renderCalcChips();
+  });
+
+  btnApplyPlayCalc.addEventListener('click', () => {
+    closeModal(modalPlayCalc, false);
+
+    const hasOffJoker = state.offenseCards.some(c => c.type === 'joker');
+    const hasOffKing = state.offenseCards.some(c => c.type === 'king');
+    const hasOffQueen = state.offenseCards.some(c => c.type === 'queen');
+
+    const hasDefJoker = state.defenseCards.some(c => c.type === 'joker');
+    const hasDefKing = state.defenseCards.some(c => c.type === 'king');
+    const hasDefAce = state.defenseCards.some(c => c.type === 'ace');
+
+    if (hasOffJoker && hasOffKing) {
+      soundScore();
+      const isHome = state.possession === 'home';
+      if (isHome) state.ballYard = Math.min(99, state.ballYard + 15);
+      else state.ballYard = Math.max(1, state.ballYard - 15);
+
+      state.down = 1;
+      state.lineGain = isHome ? Math.min(100, state.ballYard + 10) : Math.max(0, state.ballYard - 10);
+      updateFieldUI();
+      openDealModal("DEFENSIVE PENALTY! 🚩", "+15 Yards & Automatic 1st Down!<br>Deal <strong>+7 Cards</strong> to Offense &amp; <strong>+5 Cards</strong> to Defense.");
+      return;
+    }
+
+    if (hasDefJoker && hasDefKing && !hasOffKing) {
+      soundBuzzer();
+      togglePossession();
+      openDealModal("TURNOVER! 🔄", "Ball stolen! Defense takes over.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+      return;
+    }
+
+    let offSum = 0;
+    state.offenseCards.forEach(c => {
+      if (c.type === 'ace' || c.type === 'joker') offSum += hasOffQueen ? 11 : 5;
+      else offSum += Number(c.val);
+    });
+
+    let defSum = 0;
+    state.defenseCards.forEach(c => {
+      if (c.type === 'ace' || c.type === 'joker') defSum += 11;
+      else defSum += Number(c.val);
+    });
+
+    let rawDiff = offSum - defSum;
+    let net = rawDiff;
+    const defTriggeredAceSack = hasDefAce || hasDefJoker;
+    if (rawDiff < 0) {
+      const cap = defTriggeredAceSack ? -10 : -5;
+      net = Math.max(cap, rawDiff);
+    }
+
+    applyPlayYardage(net);
+  });
+
+  // ================= PUNT =================
+  const modalPunt = document.getElementById('modalPunt');
+  const chipsPuntKick = document.getElementById('chipsPuntKick');
+  const chipsPuntReturn = document.getElementById('chipsPuntReturn');
+  const puntNetText = document.getElementById('puntNetText');
+  const puntTitle = document.getElementById('puntTitle');
+  const puntDesc = document.getElementById('puntDesc');
+
+  function openPuntModal(isSafety = false) {
+    state.isSafetyFreeKick = isSafety;
+    state.puntKickCard = null;
+    state.puntReturnCard = null;
+
+    if (isSafety) {
+      puntTitle.textContent = "Safety Free Kick (From Own 20)";
+      puntDesc.textContent = "Conceding team punts from own 20. Empty hand? Draw deck (Joker = turnover at 20).";
+    } else {
+      puntTitle.textContent = "4th Down Punt";
+      puntDesc.textContent = "Punting team plays 1 card (Val x 5, Face = 45, Ace = 50). Defense plays 1 return card.";
+    }
+
+    renderPuntUI();
+    openModal(modalPunt);
+  }
+
+  document.getElementById('btnTriggerPunt').addEventListener('click', () => openPuntModal(false));
+  document.getElementById('btnClosePunt').addEventListener('click', () => closeModal(modalPunt, true));
+
+  function renderPuntUI() {
+    chipsPuntKick.innerHTML = '';
+    if (state.puntKickCard) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `${state.puntKickCard.label} ✕`;
+      chip.onclick = () => { state.puntKickCard = null; renderPuntUI(); };
+      chipsPuntKick.appendChild(chip);
+    }
+
+    chipsPuntReturn.innerHTML = '';
+    if (state.puntReturnCard) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `${state.puntReturnCard.label} ✕`;
+      chip.onclick = () => { state.puntReturnCard = null; renderPuntUI(); };
+      chipsPuntReturn.appendChild(chip);
+    }
+
+    if (state.puntKickCard && state.puntKickCard.val === 'JOKER') {
+      puntNetText.textContent = "MUFFED! Turnover at LOS!";
+      puntNetText.style.color = "var(--away)";
+      return;
+    }
+
+    let kick = 0;
+    if (state.puntKickCard) {
+      const v = Number(state.puntKickCard.val);
+      if (state.puntKickCard.label.includes('Face')) kick = 45;
+      else if (state.puntKickCard.label.includes('Ace')) kick = 50;
+      else kick = v * 5;
+    }
+
+    const ret = state.puntReturnCard ? Number(state.puntReturnCard.val) : 0;
+    const net = Math.max(0, kick - ret);
+    puntNetText.textContent = `${net} Net Yards`;
+    puntNetText.style.color = "var(--gold)";
+  }
+
+  document.getElementById('btnPuntDrawDeck').addEventListener('click', () => {
+    const isJoker = Math.random() < (2 / 54);
+    if (isJoker) {
+      state.puntKickCard = { val: 'JOKER', label: '🃏 Joker (Muff)' };
+    } else {
+      const vals = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11];
+      const lbls = ['2','3','4','5','6','7','8','9','10','Face (45y)','Ace (50y)'];
+      const r = Math.floor(Math.random() * vals.length);
+      state.puntKickCard = { val: vals[r], label: lbls[r] };
+    }
+    renderPuntUI();
+  });
+
+  document.querySelectorAll('#keysPuntKick .btn-calc-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.puntKickCard = { val: btn.dataset.val, label: btn.dataset.label || btn.textContent };
+      renderPuntUI();
+    });
+  });
+
+  document.querySelectorAll('#keysPuntReturn .btn-calc-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.puntReturnCard = { val: btn.dataset.val, label: btn.dataset.label ? `${btn.dataset.label} (${btn.dataset.val}y)` : `${btn.dataset.val}y` };
+      renderPuntUI();
+    });
+  });
+
+  document.getElementById('btnClearPuntReturn').addEventListener('click', () => {
+    state.puntReturnCard = null;
+    renderPuntUI();
+  });
+
+  document.getElementById('btnExecutePunt').addEventListener('click', () => {
+    closeModal(modalPunt, false);
+
+    if (state.puntKickCard && state.puntKickCard.val === 'JOKER') {
+      soundBuzzer();
+      togglePossession();
+      openDealModal("MUFFED PUNT! 🛑", "Punter drew a Joker! Turnover at spot of punt.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+      return;
+    }
+
+    let kick = 0;
+    if (state.puntKickCard) {
+      const v = Number(state.puntKickCard.val);
+      if (state.puntKickCard.label.includes('Face')) kick = 45;
+      else if (state.puntKickCard.label.includes('Ace')) kick = 50;
+      else kick = v * 5;
+    } else {
+      kick = 35;
+    }
+
+    const ret = state.puntReturnCard ? Number(state.puntReturnCard.val) : 0;
+    const net = Math.max(0, kick - ret);
+    const isHome = state.possession === 'home';
+
+    let landing = isHome ? (state.ballYard + net) : (state.ballYard - net);
+    if (isHome && landing >= 100) landing = 80;
+    if (!isHome && landing <= 0) landing = 20;
+
+    soundWhistle();
+    togglePossession(landing);
+    openDealModal("PUNT RESOLVED 🔄", "Possession swapped.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+  });
+
+  // ================= FIELD GOAL =================
+  const modalFG = document.getElementById('modalFG');
+  const fgTargetText = document.getElementById('fgTargetText');
+  const fgMathText = document.getElementById('fgMathText');
+  const chipsFGOffense = document.getElementById('chipsFGOffense');
+  const chipsFGDefense = document.getElementById('chipsFGDefense');
+
+  document.getElementById('btnTriggerFG').addEventListener('click', () => {
+    state.fgOffenseCards = [];
+    state.fgDefenseCards = [];
+    const isHome = state.possession === 'home';
+    const dist = isHome ? (100 - state.ballYard) : state.ballYard;
+    const target = dist + 10;
+    fgTargetText.textContent = `${target} Yards`;
+    renderFGChips();
+    openModal(modalFG);
+  });
+
+  document.getElementById('btnCloseFG').addEventListener('click', () => closeModal(modalFG, true));
+
+  function renderFGChips() {
+    chipsFGOffense.innerHTML = '';
+    state.fgOffenseCards.forEach((c, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `${c.label} ✕`;
+      chip.onclick = () => { state.fgOffenseCards.splice(idx, 1); renderFGChips(); };
+      chipsFGOffense.appendChild(chip);
+    });
+
+    chipsFGDefense.innerHTML = '';
+    state.fgDefenseCards.forEach((c, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = `${c.label} ✕`;
+      chip.onclick = () => { state.fgDefenseCards.splice(idx, 1); renderFGChips(); };
+      chipsFGDefense.appendChild(chip);
+    });
+
+    let off = 0;
+    state.fgOffenseCards.forEach(c => off += Number(c.val));
+    let def = 0;
+    const hasJoker = state.fgDefenseCards.some(c => c.val === 'JOKER');
+    state.fgDefenseCards.forEach(c => { if (c.val !== 'JOKER') def += Number(c.val); });
+
+    const net = off - def;
+    if (hasJoker) {
+      fgMathText.textContent = `Offense: ${off} yds | Def: JOKER (BLOCKED!)`;
+      fgMathText.style.color = "var(--away)";
+    } else {
+      fgMathText.textContent = `Offense (${off}) - Defense (${def}) = ${net} Net Yards`;
+      fgMathText.style.color = "var(--text-muted)";
+    }
+  }
+
+  document.getElementById('btnAutoFGDeck').addEventListener('click', () => {
+    const deck = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11];
+    for (let i = 0; i < 5; i++) {
+      const r = Math.floor(Math.random() * deck.length);
+      state.fgOffenseCards.push({ val: deck[r], label: `Deck ${deck[r]}` });
+    }
+    renderFGChips();
+  });
+
+  document.querySelectorAll('#keysFGOffense .btn-calc-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.fgOffenseCards.length >= 8) return;
+      state.fgOffenseCards.push({ val: btn.dataset.val, label: btn.dataset.label || btn.dataset.val });
+      renderFGChips();
+    });
+  });
+
+  document.querySelectorAll('#keysFGDefense .btn-calc-key').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.fgDefenseCards.length >= 2) return;
+      state.fgDefenseCards.push({ val: btn.dataset.val, label: btn.dataset.label || btn.dataset.val });
+      renderFGChips();
+    });
+  });
+
+  document.getElementById('btnClearFGDefense').addEventListener('click', () => {
+    state.fgDefenseCards = [];
+    renderFGChips();
+  });
+
+  document.getElementById('btnResolveFG').addEventListener('click', () => {
+    closeModal(modalFG, false);
+    const isHome = state.possession === 'home';
+    const dist = isHome ? (100 - state.ballYard) : state.ballYard;
+    const target = dist + 10;
+
+    let off = 0;
+    state.fgOffenseCards.forEach(c => off += Number(c.val));
+    let def = 0;
+    const hasJoker = state.fgDefenseCards.some(c => c.val === 'JOKER');
+    state.fgDefenseCards.forEach(c => { if (c.val !== 'JOKER') def += Number(c.val); });
+
+    const net = off - def;
+
+    if (!hasJoker && net > target) {
+      soundScore();
+      if (isHome) state.homeScore += 3;
+      else state.awayScore += 3;
+      updateFieldUI();
+      document.getElementById('fgMadeDetail').textContent = `3 Points awarded! Kick distance: ${target} yds (Kick Net: ${net} yds). Proceed directly to kickoff:`;
+      openModal(document.getElementById('modalFGMade'));
+    } else {
+      soundBuzzer();
+      alert(`FIELD GOAL MISSED! ${hasJoker ? '(BLOCKED BY JOKER)' : `Got ${net}y, needed ${target}y`}\nDefense takes over at kick spot.`);
+      togglePossession();
+      startGameClock();
+      startPlayClock();
+    }
+  });
+
+  // Dedicated Field Goal Kickoff Handlers
+  document.getElementById('btnFGKickTouchback').addEventListener('click', () => {
+    closeModal(document.getElementById('modalFGMade'), false);
+    const isHome = state.possession === 'home';
+    const spot = isHome ? 75 : 25; // 25 yard line
+    togglePossession(spot);
+    openDealModal("TOUCHBACK! 🏈", "Ball placed on receiving team's 25-yard line.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+  });
+
+  document.getElementById('btnFGKickReturnDeck').addEventListener('click', () => {
+    closeModal(document.getElementById('modalFGMade'), false);
+    let totalReturn = 0;
+    for (let i = 0; i < 4; i++) {
+      totalReturn += Math.floor(Math.random() * 9) + 2; // 2 to 10
+    }
+    const isHome = state.possession === 'home';
+    let landing = isHome ? (100 - totalReturn) : totalReturn;
+    togglePossession(landing);
+    openDealModal("KICK RETURN! 🏃", `Returned ${totalReturn} yards!<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.`);
+  });
+
+  // ================= TOUCHDOWN & PAT =================
+  const modalTD = document.getElementById('modalTD');
+  const patConfirmBox = document.getElementById('patConfirmBox');
+  const kickoffBox = document.getElementById('kickoffBox');
+
+  function openTouchdownModal() {
+    document.getElementById('btnSelectPAT1').style.display = 'block';
+    document.getElementById('btnSelectPAT2').style.display = 'block';
+    patConfirmBox.style.display = 'none';
+    kickoffBox.style.display = 'none';
+    openModal(modalTD);
+  }
+
+  document.getElementById('btnSelectPAT1').addEventListener('click', () => {
+    state.pendingPATPoints = 1;
+    document.getElementById('patPromptText').textContent = "1-Point Kick: Was the flip 4 or higher (Good)?";
+    patConfirmBox.style.display = 'block';
+  });
+
+  document.getElementById('btnSelectPAT2').addEventListener('click', () => {
+    state.pendingPATPoints = 2;
+    document.getElementById('patPromptText').textContent = "2-Point Try: Did Offense beat Defense?";
+    patConfirmBox.style.display = 'block';
+  });
+
+  document.getElementById('btnConfirmPATSuccess').addEventListener('click', () => {
+    soundScore();
+    if (state.possession === 'home') state.homeScore += state.pendingPATPoints;
+    else state.awayScore += state.pendingPATPoints;
+    updateFieldUI();
+    patConfirmBox.style.display = 'none';
+    kickoffBox.style.display = 'block';
+  });
+
+  document.getElementById('btnConfirmPATFail').addEventListener('click', () => {
+    soundBuzzer();
+    patConfirmBox.style.display = 'none';
+    kickoffBox.style.display = 'block';
+  });
+
+  document.getElementById('btnTDKickTouchback').addEventListener('click', () => {
+    closeModal(modalTD, false);
+    const isHome = state.possession === 'home';
+    const spot = isHome ? 75 : 25; // 25 yard line
+    togglePossession(spot);
+    openDealModal("TOUCHBACK! 🏈", "Ball placed on receiving team's 25-yard line.<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.");
+  });
+
+  document.getElementById('btnTDKickReturnDeck').addEventListener('click', () => {
+    closeModal(modalTD, false);
+    let totalReturn = 0;
+    for (let i = 0; i < 4; i++) {
+      totalReturn += Math.floor(Math.random() * 9) + 2; // 2 to 10
+    }
+    const isHome = state.possession === 'home';
+    let landing = isHome ? (100 - totalReturn) : totalReturn;
+    togglePossession(landing);
+    openDealModal("KICK RETURN! 🏃", `Returned ${totalReturn} yards!<br>Deal <strong>8 Cards</strong> to new Offense, <strong>5 Cards</strong> to Defense.`);
+  });
+
+  // ================= SCORE ADJUST MODAL =================
+  const modalScore = document.getElementById('modalScoreAdjust');
+  document.getElementById('btnOpenScoreModal').addEventListener('click', () => openModal(modalScore));
+  document.getElementById('btnCloseScoreModal').addEventListener('click', () => closeModal(modalScore, true));
+
+  document.querySelectorAll('[data-add-home]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.homeScore = Math.max(0, state.homeScore + parseInt(b.dataset.addHome));
+      updateFieldUI();
+    });
+  });
+
+  document.querySelectorAll('[data-add-away]').forEach(b => {
+    b.addEventListener('click', () => {
+      state.awayScore = Math.max(0, state.awayScore + parseInt(b.dataset.addAway));
+      updateFieldUI();
+    });
+  });
+
+  document.getElementById('btnNextQuarterModal').addEventListener('click', () => {
+    advanceQuarter();
+    updateFieldUI();
+    closeModal(modalScore, true);
+  });
+
+  // ================= NEW GAME / QUARTER SETUP MODAL =================
+  const modalNewGame = document.getElementById('modalNewGame');
+  document.getElementById('btnResetGame').addEventListener('click', () => {
+    openModal(modalNewGame);
+  });
+  document.getElementById('btnCloseNewGameModal').addEventListener('click', () => {
+    closeModal(modalNewGame, true);
+  });
+
+  document.querySelectorAll('#quarterLengthPills .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#quarterLengthPills .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  document.getElementById('btnApplyQuarterLenOnly').addEventListener('click', () => {
+    const activePill = document.querySelector('#quarterLengthPills .pill-btn.active');
+    const mins = parseInt(activePill.dataset.mins);
+    state.quarterMinutes = mins;
+    state.gameSeconds = mins * 60;
+    elGameClockLabel.textContent = `Game Clock (${mins}m)`;
+    elGameClock.textContent = formatTime(state.gameSeconds);
+    elQtrBadge.textContent = `Q${state.quarter} ${formatTime(state.gameSeconds)}`;
+    closeModal(modalNewGame, true);
+  });
+
+  document.getElementById('btnConfirmResetNewGame').addEventListener('click', () => {
+    const activePill = document.querySelector('#quarterLengthPills .pill-btn.active');
+    const mins = parseInt(activePill.dataset.mins);
+    state.quarterMinutes = mins;
+    state.gameSeconds = mins * 60;
+    state.homeScore = 0;
+    state.awayScore = 0;
+    state.possession = 'home';
+    state.ballYard = 20;
+    state.down = 1;
+    state.lineGain = 30;
+    state.quarter = 1;
+    state.playSeconds = 30;
+    pauseGameClock();
+    pausePlayClock();
+    elGameClockLabel.textContent = `Game Clock (${mins}m)`;
+    elGameClock.textContent = formatTime(state.gameSeconds);
+    elPlayClock.textContent = ":30";
+    elQtrBadge.textContent = `Q1 ${formatTime(state.gameSeconds)}`;
+    updateFieldUI();
+    closeModal(modalNewGame, false);
+    elStatusText.textContent = `New game initialized! ${mins}-minute quarters.`;
+  });
+
+  // ================= RULES MODAL =================
+  document.getElementById('btnOpenRules').addEventListener('click', () => {
+    openModal(document.getElementById('modalRules'));
+  });
+  document.getElementById('btnCloseRules').addEventListener('click', () => {
+    closeModal(document.getElementById('modalRules'), true);
+  });
+
+  // Initial draw
+  updateFieldUI();
+});
+</script>
+</body>
+</html>
