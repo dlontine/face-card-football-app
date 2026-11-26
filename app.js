@@ -6,13 +6,9 @@
 (() => {
   'use strict';
 
-  const HAND_LIMIT = 12;
   const PLAY_CARD_LIMIT = 3;
-  const FRESH_DRIVE_OFFENSE = 8;
-  const FRESH_DRIVE_DEFENSE = 5;
-  const FIRST_DOWN_OFFENSE_ADD = 7;
-  const FIRST_DOWN_DEFENSE_ADD = 5;
   const PLAY_CLOCK_DEFAULT = 30;
+  const OT_DURATION_SECONDS = 120; // 2 minutes
 
   // =========================================================================
   // GAME STATE MACHINE
@@ -21,13 +17,14 @@
     scoreHome: 0,
     scoreAway: 0,
     possession: 'home', // 'home' | 'away'
+    openingReceiver: 'home', // Tracks who received Q1 kickoff so other team gets Q3
     down: 1,
     distance: 10,
-    ballOn: 20, // 1–99 during play (0 = Home Goal, 100 = Away Goal)
-    lineGain: 30,
-    quarter: 1, // 1–4
-    quarterLengthMinutes: 5, // 3, 5, or 7
-    gameTimeRemaining: 300,
+    ballOn: 25, // 1–99 during play (0 = Home Goal, 100 = Away Goal)
+    lineGain: 35,
+    quarter: 1, // 1–4, 5+ = OT
+    quarterLengthMinutes: 3, // 3, 5, or 7
+    gameTimeRemaining: 180,
     playClockTime: PLAY_CLOCK_DEFAULT,
     playClockExpired: false,
 
@@ -40,28 +37,33 @@
     gameTimerId: null,
     playTimerId: null,
 
-    // Hand tracking
-    offenseHandCount: FRESH_DRIVE_OFFENSE,
-    defenseHandCount: FRESH_DRIVE_DEFENSE,
+    // Half-end 3-second warning & special play flags
+    finalSecondsWarnedQ2: false,
+    finalSecondsWarnedQ4: false,
+    isFinalSecondsPlay: false,
+    isCelebratingTD: false,
+
+    // Kickoff & Coin Flip context
+    kickoffContext: 'opening', // 'opening' | 'halftime' | 'score' | 'overtime'
+    kickoffReceivingTeam: 'home',
+    openingCoinWinner: null,
+    otCoinWinner: null,
 
     // Preferences & pending workflows
     soundEnabled: true,
-    aceMode: 'standard', // 'standard' (Ace = 11) | 'v4' (Off Ace = 11 w/ Q else 5)
-    pendingDealType: null, // 'fresh' | 'firstdown' | null
     pendingPATPoints: 1,
 
-    // Play Calc buffers
+    // Card buffers
     offenseCards: [],
     defenseCards: [],
-
-    // Punt buffers
+    hailMaryOffenseCards: [],
+    hailMaryDefenseCards: [],
     puntKickCard: null,
     puntReturnCard: null,
     isSafetyFreeKick: false,
-
-    // Field Goal buffers
     fgOffenseCards: [],
     fgDefenseCards: [],
+    kickReturnCards: [],
   };
 
   // =========================================================================
@@ -81,7 +83,7 @@
     return audioCtx;
   }
 
-  function playTone(freq, duration, type = 'sine', volume = 0.1) {
+  function playTone(freq, duration, type = 'sine', volume = 0.09) {
     const ctx = getAudioContext();
     if (!ctx) return;
     try {
@@ -96,25 +98,50 @@
       osc.start();
       osc.stop(ctx.currentTime + duration);
     } catch {
-      // Ignore audio autoplay restrictions
+      // Ignore audio autoplay blocks
     }
   }
 
   const sfx = {
     whistle() {
-      playTone(2350, 0.11, 'triangle', 0.08);
-      setTimeout(() => playTone(2550, 0.18, 'triangle', 0.08), 95);
+      playTone(2350, 0.1, 'triangle', 0.08);
+      setTimeout(() => playTone(2550, 0.16, 'triangle', 0.08), 90);
     },
     buzzer() {
-      playTone(145, 0.52, 'sawtooth', 0.11);
+      playTone(145, 0.48, 'sawtooth', 0.1);
     },
     score() {
       [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-        setTimeout(() => playTone(freq, 0.16, 'sine', 0.1), i * 75);
+        setTimeout(() => playTone(freq, 0.15, 'sine', 0.09), i * 70);
+      });
+    },
+    touchdown() {
+      const notes = [
+        [392.0, 0, 0.12],
+        [523.25, 95, 0.14],
+        [659.25, 190, 0.14],
+        [783.99, 290, 0.18],
+        [1046.5, 420, 0.36],
+      ];
+      notes.forEach(([freq, delay, dur]) => {
+        setTimeout(() => playTone(freq, dur, 'triangle', 0.11), delay);
+      });
+    },
+    victory() {
+      const fanfare = [
+        [523.25, 0, 0.15],
+        [659.25, 130, 0.15],
+        [783.99, 260, 0.16],
+        [1046.5, 410, 0.22],
+        [783.99, 600, 0.14],
+        [1046.5, 730, 0.55],
+      ];
+      fanfare.forEach(([freq, delay, dur]) => {
+        setTimeout(() => playTone(freq, dur, 'triangle', 0.11), delay);
       });
     },
     tick() {
-      playTone(760, 0.07, 'sine', 0.08);
+      playTone(760, 0.06, 'sine', 0.07);
     },
   };
 
@@ -124,7 +151,13 @@
   const $ = (id) => document.getElementById(id);
 
   const dom = {
-    // Scoreboard
+    // Scoreboard & Single Unified Clock
+    celebrationCanvas: $('celebrationCanvas'),
+    scoreboardPanel: $('scoreboardPanel'),
+    tdScoreboardBanner: $('tdScoreboardBanner'),
+    tdBannerText: $('tdBannerText'),
+    popHome: $('popHome'),
+    popAway: $('popAway'),
     teamBlockHome: $('teamBlockHome'),
     teamBlockAway: $('teamBlockAway'),
     scoreHome: $('scoreHome'),
@@ -132,70 +165,71 @@
     badgeHome: $('badgeHome'),
     badgeAway: $('badgeAway'),
     quarterDisplay: $('quarterDisplay'),
-    qtrBadgeTime: $('qtrBadgeTime'),
-
-    // Clocks
-    gameClockLabel: $('gameClockLabel'),
     gameClock: $('gameClock'),
-    btnToggleGameClock: $('btnToggleGameClock'),
     playClockModule: $('playClockModule'),
     playClock: $('playClock'),
     playClockExpiredFlag: $('playClockExpiredFlag'),
-    btnStartPlayClock: $('btnStartPlayClock'),
-    btnPausePlayClock: $('btnPausePlayClock'),
+    btnTimeoutToggle: $('btnTimeoutToggle'),
     btnResetPlayClock: $('btnResetPlayClock'),
 
     // Field & Down
     downTag: $('downTag'),
     locTag: $('locTag'),
     driveIndicator: $('driveIndicator'),
-    ballOnNumeric: $('ballOnNumeric'),
+    btnOpenFourthDown: $('btnOpenFourthDown'),
     svgLosGroup: $('svgLosGroup'),
     svgFirstDownGroup: $('svgFirstDownGroup'),
     svgLosText: $('svgLosText'),
     svgToGoZone: $('svgToGoZone'),
-    ballScrubber: $('ballScrubber'),
-    scrubberYardVal: $('scrubberYardVal'),
-
-    // Hand Tracker
-    offenseHandCount: $('offenseHandCount'),
-    defenseHandCount: $('defenseHandCount'),
-    offenseHandBar: $('offenseHandBar'),
-    defenseHandBar: $('defenseHandBar'),
-    offenseHandNote: $('offenseHandNote'),
-    defenseHandNote: $('defenseHandNote'),
-
-    // Status
     statusText: $('statusText'),
 
     // Modals
     modalPlayCalc: $('modalPlayCalc'),
+    modalFourthDown: $('modalFourthDown'),
+    modalFinalSeconds: $('modalFinalSeconds'),
+    modalHailMary: $('modalHailMary'),
     modalPunt: $('modalPunt'),
     modalFG: $('modalFG'),
     modalFGMade: $('modalFGMade'),
     modalFGMissed: $('modalFGMissed'),
-    modalTD: $('modalTD'),
+    modalTDChoice: $('modalTDChoice'),
+    modalPATResult: $('modalPATResult'),
+    modalOpeningCoinFlip: $('modalOpeningCoinFlip'),
+    modalKickoff: $('modalKickoff'),
+    modalKickReturn: $('modalKickReturn'),
     modalSafety: $('modalSafety'),
     modalDelayOfGame: $('modalDelayOfGame'),
+    modalOvertime: $('modalOvertime'),
     modalQuarterEnd: $('modalQuarterEnd'),
     modalDeal: $('modalDeal'),
     modalScoreAdjust: $('modalScoreAdjust'),
     modalNewGame: $('modalNewGame'),
     modalRules: $('modalRules'),
 
-    // Play Calc controls
-    inputOffenseSum: $('inputOffenseSum'),
-    inputDefenseSum: $('inputDefenseSum'),
+    // Play Calc
     chipsOffense: $('chipsOffense'),
     chipsDefense: $('chipsDefense'),
     labelOffenseCount: $('labelOffenseCount'),
     labelDefenseCount: $('labelDefenseCount'),
-    btnOffAceKey: $('btnOffAceKey'),
     calcDiffText: $('calcDiffText'),
     calcOutcomeSubtext: $('calcOutcomeSubtext'),
     btnApplyPlayCalc: $('btnApplyPlayCalc'),
 
-    // Punt controls
+    // 4th Down & Final Seconds
+    titleFourthDown: $('titleFourthDown'),
+    fourthDownDetail: $('fourthDownDetail'),
+    finalSecondsKicker: $('finalSecondsKicker'),
+    finalSecondsDetail: $('finalSecondsDetail'),
+
+    // Hail Mary
+    hailMaryTargetText: $('hailMaryTargetText'),
+    hailMaryMathText: $('hailMaryMathText'),
+    labelHMOffense: $('labelHMOffense'),
+    labelHMDefense: $('labelHMDefense'),
+    chipsHMOffense: $('chipsHMOffense'),
+    chipsHMDefense: $('chipsHMDefense'),
+
+    // Punt
     puntTitle: $('puntTitle'),
     puntDesc: $('puntDesc'),
     chipsPuntKick: $('chipsPuntKick'),
@@ -203,20 +237,49 @@
     puntNetText: $('puntNetText'),
     puntLandingPreview: $('puntLandingPreview'),
 
-    // Field Goal controls
+    // Field Goal
     fgTargetText: $('fgTargetText'),
     fgMathText: $('fgMathText'),
+    labelFGOffense: $('labelFGOffense'),
+    labelFGDefense: $('labelFGDefense'),
     chipsFGOffense: $('chipsFGOffense'),
     chipsFGDefense: $('chipsFGDefense'),
     fgMadeDetail: $('fgMadeDetail'),
     fgMissedDetail: $('fgMissedDetail'),
 
-    // Touchdown & PAT
-    patConfirmBox: $('patConfirmBox'),
-    patPromptText: $('patPromptText'),
-    kickoffBox: $('kickoffBox'),
+    // Opening Coin Flip
+    openingCoinStatus: $('openingCoinStatus'),
+    openingCoinDisc: $('openingCoinDisc'),
+    openingCallRow: $('openingCallRow'),
+    openingChoiceRow: $('openingChoiceRow'),
+
+    // TD Phases & Kickoff / Return
+    tdChoiceDetail: $('tdChoiceDetail'),
+    titlePATResult: $('titlePATResult'),
+    patResultPrompt: $('patResultPrompt'),
+    kickoffKicker: $('kickoffKicker'),
+    titleKickoff: $('titleKickoff'),
+    kickoffDetail: $('kickoffDetail'),
+    kickReturnSubtitle: $('kickReturnSubtitle'),
+    labelKickReturnCount: $('labelKickReturnCount'),
+    chipsKickReturn: $('chipsKickReturn'),
+    kickReturnTotalText: $('kickReturnTotalText'),
+    kickReturnSpotText: $('kickReturnSpotText'),
+
+    // Overtime Coin Flip
+    otStatusText: $('otStatusText'),
+    otCoinDisc: $('otCoinDisc'),
+    btnFlipOTCoin: $('btnFlipOTCoin'),
+    otChoiceRow: $('otChoiceRow'),
 
     // Quarter End & Deal
+    quarterEndCard: $('quarterEndCard'),
+    victoryTrophyWrap: $('victoryTrophyWrap'),
+    victoryScoreStrip: $('victoryScoreStrip'),
+    victoryColHome: $('victoryColHome'),
+    victoryColAway: $('victoryColAway'),
+    victoryFinalHome: $('victoryFinalHome'),
+    victoryFinalAway: $('victoryFinalAway'),
     quarterEndKicker: $('quarterEndKicker'),
     titleQuarterEnd: $('titleQuarterEnd'),
     quarterEndBody: $('quarterEndBody'),
@@ -229,6 +292,200 @@
     modalHomeScoreVal: $('modalHomeScoreVal'),
     modalAwayScoreVal: $('modalAwayScoreVal'),
   };
+
+  // =========================================================================
+  // CELEBRATION ENGINE (SCOREBOARD TD ANIMATION & VICTORY CONFETTI)
+  // =========================================================================
+  const celebration = {
+    rafId: null,
+    waveTimerId: null,
+    particles: [],
+    tdTimeoutId: null,
+  };
+
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function resizeCelebrationCanvas() {
+    const canvas = dom.celebrationCanvas;
+    if (!canvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function spawnConfettiBurst(originX, originY, count, colors, spreadSpeed = 7.5) {
+    for (let i = 0; i < count; i += 1) {
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.35;
+      const speed = spreadSpeed * (0.45 + Math.random() * 0.9);
+      celebration.particles.push({
+        x: originX + (Math.random() - 0.5) * 80,
+        y: originY + (Math.random() - 0.5) * 16,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.5,
+        gravity: 0.16 + Math.random() * 0.08,
+        drag: 0.985,
+        w: 5 + Math.random() * 5,
+        h: 3 + Math.random() * 4,
+        rot: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 0.24,
+        color: colors[i % colors.length],
+        life: 1,
+        decay: 0.011 + Math.random() * 0.008,
+      });
+    }
+  }
+
+  function runConfettiLoop() {
+    const canvas = dom.celebrationCanvas;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    for (let i = celebration.particles.length - 1; i >= 0; i -= 1) {
+      const p = celebration.particles[i];
+      p.vx *= p.drag;
+      p.vy = p.vy * p.drag + p.gravity;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vRot;
+      p.life -= p.decay;
+
+      if (p.life <= 0 || p.y > h + 30) {
+        celebration.particles.splice(i, 1);
+        continue;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+
+    if (celebration.particles.length > 0) {
+      celebration.rafId = requestAnimationFrame(runConfettiLoop);
+    } else {
+      celebration.rafId = null;
+      ctx.clearRect(0, 0, w, h);
+    }
+  }
+
+  function launchConfetti(mode, team) {
+    if (prefersReducedMotion()) return;
+    resizeCelebrationCanvas();
+
+    const teamPalette =
+      team === 'home'
+        ? ['#38bdf8', '#fbbf24', '#22c55e', '#f8fafc']
+        : ['#f87171', '#fbbf24', '#22c55e', '#f8fafc'];
+
+    if (mode === 'touchdown') {
+      const rect = dom.scoreboardPanel.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height * 0.55;
+      spawnConfettiBurst(cx, cy, 46, teamPalette, 7.2);
+    } else if (mode === 'victory') {
+      stopConfetti();
+      resizeCelebrationCanvas();
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      spawnConfettiBurst(w * 0.25, h * 0.45, 45, teamPalette, 8.8);
+      spawnConfettiBurst(w * 0.75, h * 0.45, 45, teamPalette, 8.8);
+      let waves = 0;
+      celebration.waveTimerId = setInterval(() => {
+        waves += 1;
+        if (waves > 4) {
+          clearInterval(celebration.waveTimerId);
+          celebration.waveTimerId = null;
+          return;
+        }
+        const rx = w * (0.2 + Math.random() * 0.6);
+        const ry = h * (0.25 + Math.random() * 0.35);
+        spawnConfettiBurst(rx, ry, 34, teamPalette, 8.0);
+        if (!celebration.rafId) celebration.rafId = requestAnimationFrame(runConfettiLoop);
+      }, 650);
+    }
+
+    if (!celebration.rafId && celebration.particles.length > 0) {
+      celebration.rafId = requestAnimationFrame(runConfettiLoop);
+    }
+  }
+
+  function stopConfetti() {
+    if (celebration.waveTimerId) {
+      clearInterval(celebration.waveTimerId);
+      celebration.waveTimerId = null;
+    }
+    if (celebration.rafId) {
+      cancelAnimationFrame(celebration.rafId);
+      celebration.rafId = null;
+    }
+    celebration.particles = [];
+    const canvas = dom.celebrationCanvas;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function triggerScoreboardTD(team, onComplete) {
+    clearTimeout(celebration.tdTimeoutId);
+    const board = dom.scoreboardPanel;
+    const teamBlock = team === 'home' ? dom.teamBlockHome : dom.teamBlockAway;
+    const popEl = team === 'home' ? dom.popHome : dom.popAway;
+
+    board.classList.remove('td-celebrate-home', 'td-celebrate-away');
+    dom.teamBlockHome.classList.remove('is-scoring');
+    dom.teamBlockAway.classList.remove('is-scoring');
+    dom.popHome.classList.remove('is-active');
+    dom.popAway.classList.remove('is-active');
+    dom.tdScoreboardBanner.classList.remove('is-active');
+
+    void board.offsetWidth; // Force reflow to restart CSS keyframes
+
+    dom.tdBannerText.textContent = `${team === 'home' ? 'HOME' : 'AWAY'} TOUCHDOWN!`;
+    board.classList.add(team === 'home' ? 'td-celebrate-home' : 'td-celebrate-away');
+    teamBlock.classList.add('is-scoring');
+    popEl.classList.add('is-active');
+    dom.tdScoreboardBanner.classList.add('is-active');
+
+    sfx.touchdown();
+    launchConfetti('touchdown', team);
+
+    const delayMs = prefersReducedMotion() ? 220 : 1150;
+    if (onComplete) {
+      state.isCelebratingTD = true;
+      pauseGameClock();
+      pausePlayClock();
+    }
+
+    celebration.tdTimeoutId = setTimeout(() => {
+      board.classList.remove('td-celebrate-home', 'td-celebrate-away');
+      teamBlock.classList.remove('is-scoring');
+      popEl.classList.remove('is-active');
+      dom.tdScoreboardBanner.classList.remove('is-active');
+      state.isCelebratingTD = false;
+      if (onComplete) onComplete();
+    }, delayMs);
+  }
+
+  function clearVictoryModalState() {
+    dom.quarterEndCard.classList.remove('is-victory', 'victory-home', 'victory-away');
+    dom.victoryTrophyWrap.hidden = true;
+    dom.victoryScoreStrip.hidden = true;
+    dom.victoryColHome.classList.remove('is-winner');
+    dom.victoryColAway.classList.remove('is-winner');
+  }
 
   // =========================================================================
   // UTILITIES
@@ -249,6 +506,10 @@
 
   function ordinalDown(down) {
     return ['1st', '2nd', '3rd', '4th'][down - 1] || `${down}th`;
+  }
+
+  function teamLabel(team) {
+    return team === 'home' ? 'Home' : 'Away';
   }
 
   function setStatus(message) {
@@ -276,16 +537,24 @@
     return possession === 'home' ? `Opp ${oppYard}` : `Own ${oppYard}`;
   }
 
+  function getYardsToEndzone() {
+    return state.possession === 'home' ? 100 - state.ballOn : state.ballOn;
+  }
+
+  function getFGTargetDistance() {
+    return getYardsToEndzone() + 10;
+  }
+
   // =========================================================================
-  // SYNCHRONIZED CLOCK ENGINE
+  // SYNCHRONIZED CLOCK ENGINE (SINGLE TIMEOUT CONTROL)
   // =========================================================================
   function renderClocks() {
-    const formattedGame = formatGameClock(state.gameTimeRemaining);
-    dom.gameClock.textContent = formattedGame;
-    dom.qtrBadgeTime.textContent = formattedGame;
-    dom.quarterDisplay.textContent = state.quarter <= 4 ? `Q${state.quarter}` : `OT${state.quarter - 4}`;
-    dom.gameClockLabel.textContent = `Quarter Clock (${state.quarterLengthMinutes} min)`;
-    dom.btnToggleGameClock.textContent = state.gameClockRunning ? 'Pause' : 'Start';
+    dom.gameClock.textContent = formatGameClock(state.gameTimeRemaining);
+    dom.quarterDisplay.textContent = state.quarter <= 4 ? `Q${state.quarter}` : state.quarter === 5 ? 'OT' : `OT${state.quarter - 4}`;
+
+    const anyRunning = state.gameClockRunning || state.playClockRunning;
+    dom.btnTimeoutToggle.textContent = anyRunning ? 'Timeout' : 'Start Clock';
+    dom.btnTimeoutToggle.classList.toggle('is-running', anyRunning);
 
     dom.playClock.textContent = formatPlayClock(state.playClockTime);
     dom.playClockExpiredFlag.hidden = !state.playClockExpired;
@@ -305,12 +574,27 @@
       if (state.gameTimeRemaining > 0) {
         state.gameTimeRemaining -= 1;
         renderClocks();
+
+        // Check 3-second warning in Q2 (Half) or Q4 (End of Regulation)
+        if (state.gameTimeRemaining === 3) {
+          if (state.quarter === 2 && !state.finalSecondsWarnedQ2) {
+            state.finalSecondsWarnedQ2 = true;
+            openFinalSecondsModal();
+            return;
+          }
+          if (state.quarter === 4 && !state.finalSecondsWarnedQ4) {
+            state.finalSecondsWarnedQ4 = true;
+            openFinalSecondsModal();
+            return;
+          }
+        }
       }
+
       if (state.gameTimeRemaining <= 0) {
         pauseGameClock();
         pausePlayClock();
         sfx.buzzer();
-        openQuarterEndModal();
+        handleQuarterExpired();
       }
     }, 1000);
     renderClocks();
@@ -368,7 +652,7 @@
 
   function setQuarterLength(minutes, resetClock = true) {
     state.quarterLengthMinutes = minutes;
-    if (resetClock) {
+    if (resetClock && state.quarter <= 4) {
       pauseGameClock();
       state.gameTimeRemaining = minutes * 60;
     }
@@ -383,7 +667,7 @@
   }
 
   // =========================================================================
-  // MODAL MANAGER (SYNCHRONIZED AUTO-PAUSE)
+  // MODAL MANAGER (AUTO-PAUSES BOTH CLOCKS)
   // =========================================================================
   function openModal(modalEl) {
     if (state.activeModals.size === 0) {
@@ -402,55 +686,9 @@
       state.activeModals.delete(modalEl.id);
     }
     if (state.activeModals.size === 0 && resumePreviousClocks) {
-      if (state.wasGameClockRunningBeforeModal) startGameClock();
+      if (state.wasGameClockRunningBeforeModal && state.gameTimeRemaining > 0) startGameClock();
       if (state.wasPlayClockRunningBeforeModal && !state.playClockExpired) startPlayClock();
     }
-  }
-
-  // =========================================================================
-  // HAND TRACKER RENDER & LOGIC
-  // =========================================================================
-  function renderHandTracker() {
-    dom.offenseHandCount.textContent = String(state.offenseHandCount);
-    dom.defenseHandCount.textContent = String(state.defenseHandCount);
-
-    const offPct = (state.offenseHandCount / HAND_LIMIT) * 100;
-    const defPct = (state.defenseHandCount / HAND_LIMIT) * 100;
-
-    dom.offenseHandBar.style.width = `${offPct}%`;
-    dom.defenseHandBar.style.width = `${defPct}%`;
-
-    dom.offenseHandBar.classList.toggle('is-at-limit', state.offenseHandCount >= HAND_LIMIT);
-    dom.offenseHandBar.classList.toggle('is-empty', state.offenseHandCount === 0);
-    dom.defenseHandBar.classList.toggle('is-at-limit', state.defenseHandCount >= HAND_LIMIT);
-    dom.defenseHandBar.classList.toggle('is-empty', state.defenseHandCount === 0);
-
-    updateHandNote(dom.offenseHandNote, state.offenseHandCount, 'Offense');
-    updateHandNote(dom.defenseHandNote, state.defenseHandCount, 'Defense');
-  }
-
-  function updateHandNote(el, count, side) {
-    el.classList.remove('is-warning', 'is-danger');
-    if (count === 0) {
-      el.textContent = `Empty Hand Rule: ${side} plays 0 cards`;
-      el.classList.add('is-danger');
-    } else if (count >= HAND_LIMIT) {
-      el.textContent = 'At 12-card limit (discard any excess)';
-      el.classList.add('is-warning');
-    } else {
-      el.textContent = `Play up to ${Math.min(PLAY_CARD_LIMIT, count)} cards this snap`;
-    }
-  }
-
-  function applyDealToHandCounts(type) {
-    if (type === 'fresh') {
-      state.offenseHandCount = FRESH_DRIVE_OFFENSE;
-      state.defenseHandCount = FRESH_DRIVE_DEFENSE;
-    } else if (type === 'firstdown') {
-      state.offenseHandCount = Math.min(HAND_LIMIT, state.offenseHandCount + FIRST_DOWN_OFFENSE_ADD);
-      state.defenseHandCount = Math.min(HAND_LIMIT, state.defenseHandCount + FIRST_DOWN_DEFENSE_ADD);
-    }
-    renderHandTracker();
   }
 
   // =========================================================================
@@ -478,27 +716,20 @@
     dom.svgLosGroup.setAttribute('transform', `translate(${losX}, 0)`);
     dom.svgFirstDownGroup.setAttribute('transform', `translate(${gainX}, 0)`);
 
-    // Highlight zone between LOS and 1st Down line
     const zoneX = Math.min(losX, gainX);
     const zoneW = Math.max(0, Math.abs(gainX - losX));
     dom.svgToGoZone.setAttribute('x', String(zoneX));
     dom.svgToGoZone.setAttribute('width', String(zoneW));
-
-    dom.ballScrubber.value = String(clampedBall);
-    dom.scrubberYardVal.textContent = `${clampedBall} yd`;
-    dom.ballOnNumeric.textContent = `Yard ${clampedBall}`;
 
     const yardsToGo = computeDistance();
     const isGoalToGo = (isHome && state.lineGain >= 100) || (!isHome && state.lineGain <= 0);
     const toGoLabel = isGoalToGo || yardsToGo <= 0 ? 'Goal' : String(yardsToGo);
 
     dom.downTag.textContent = `${ordinalDown(state.down)} & ${toGoLabel}`;
-    dom.locTag.textContent = `Ball on ${formatSpotLabel(clampedBall, state.possession)} · ${
-      isHome ? 'Driving Right →' : '← Driving Left'
-    }`;
+    dom.locTag.textContent = `${formatSpotLabel(clampedBall, state.possession)} · ${isHome ? 'Driving Right →' : '← Driving Left'}`;
+    dom.btnOpenFourthDown.hidden = state.down !== 4;
 
     renderClocks();
-    renderHandTracker();
   }
 
   // =========================================================================
@@ -513,19 +744,31 @@
     renderFieldAndScoreboard();
   }
 
-  function openDealPrompt(kicker, title, body, dealType) {
-    state.pendingDealType = dealType;
+  function openDealPrompt(kicker, title, body) {
     dom.dealKicker.textContent = kicker;
     dom.dealTitle.textContent = title;
     dom.dealBody.textContent = body;
     openModal(dom.modalDeal);
   }
 
+  function openFourthDownModal() {
+    const isHome = state.possession === 'home';
+    const yardsToGo = computeDistance();
+    const isGoalToGo = (isHome && state.lineGain >= 100) || (!isHome && state.lineGain <= 0);
+    const toGoLabel = isGoalToGo || yardsToGo <= 0 ? 'Goal' : String(yardsToGo);
+    const fgTarget = getFGTargetDistance();
+
+    dom.titleFourthDown.textContent = `4th & ${toGoLabel}`;
+    dom.fourthDownDetail.textContent = `Ball on ${formatSpotLabel(state.ballOn, state.possession)} · Field Goal Target: ${fgTarget} Yards`;
+    openModal(dom.modalFourthDown);
+  }
+
   function applyPlayYardage(netYards, options = {}) {
+    if (state.isCelebratingTD) return;
     const isHome = state.possession === 'home';
     const nextBallOn = isHome ? state.ballOn + netYards : state.ballOn - netYards;
 
-    // 1. Safety Check (pushed into own endzone)
+    // 1. Safety Check
     if ((isHome && nextBallOn <= 0) || (!isHome && nextBallOn >= 100)) {
       sfx.buzzer();
       if (isHome) state.scoreAway += 2;
@@ -537,15 +780,15 @@
       return;
     }
 
-    // 2. Touchdown Check (crossed opponent goal line)
+    // 2. Touchdown Check
     if ((isHome && nextBallOn >= 100) || (!isHome && nextBallOn <= 0)) {
-      sfx.score();
+      const scoringTeam = state.possession;
       if (isHome) state.scoreHome += 6;
       else state.scoreAway += 6;
       state.ballOn = isHome ? 99 : 1;
       renderFieldAndScoreboard();
-      setStatus(`Touchdown ${isHome ? 'Home' : 'Away'}! (+6 points)`);
-      openTouchdownModal();
+      setStatus(`Touchdown ${teamLabel(scoringTeam)}! (+6)`);
+      triggerScoreboardTD(scoringTeam, () => openTouchdownPhase1());
       return;
     }
 
@@ -557,38 +800,42 @@
       sfx.score();
       resetFirstDownMarkers();
       renderFieldAndScoreboard();
-      const label = options.reason || `Gain of ${netYards >= 0 ? '+' : ''}${netYards} yds`;
-      setStatus(`${label} — First Down at ${formatSpotLabel(state.ballOn, state.possession)}.`);
+      setStatus(`${netYards >= 0 ? '+' : ''}${netYards} yds — 1st & 10 at ${formatSpotLabel(state.ballOn, state.possession)}.`);
       openDealPrompt(
         'First Down Achieved',
         '1st & 10',
-        'Deal +7 cards to Offense and +5 cards to Defense. Hold unused cards (12-card maximum).',
-        'firstdown'
+        'Deal +7 cards to Offense and +5 cards to Defense. Hold unused cards (12-card maximum).'
       );
       return;
     }
 
-    // 4. Down Progression / Turnover on Downs
+    // 4. Down Progression
     if (state.down < 4) {
       state.down += 1;
       sfx.whistle();
       renderFieldAndScoreboard();
-      startGameClock();
-      resetPlayClock(true);
       setStatus(
-        `Play resolved (${netYards >= 0 ? '+' : ''}${netYards} yds). ${ordinalDown(state.down)} & ${
-          state.distance
-        } at ${formatSpotLabel(state.ballOn, state.possession)}.`
+        `${netYards >= 0 ? '+' : ''}${netYards} yds. ${ordinalDown(state.down)} & ${state.distance} at ${formatSpotLabel(
+          state.ballOn,
+          state.possession
+        )}.`
       );
+
+      // Automatically prompt Punt / Field Goal / Go For It on 4th down!
+      if (state.down === 4) {
+        openFourthDownModal();
+      } else {
+        startGameClock();
+        resetPlayClock(true);
+      }
     } else {
       sfx.buzzer();
       switchPossession();
-      setStatus(`Turnover on downs! ${state.possession === 'home' ? 'Home' : 'Away'} takes over.`);
+      setStatus(`Turnover on downs! ${teamLabel(state.possession)} takes over.`);
       openDealPrompt(
         '4th Down Stop',
         'Turnover on Downs',
-        'Offense stopped on 4th down. Deal 8 cards to the new Offense and 5 cards to Defense.',
-        'fresh'
+        'Offense stopped on 4th down. Deal 8 cards to the new Offense and 5 cards to Defense.'
       );
     }
   }
@@ -596,74 +843,173 @@
   function enforceOffensiveJokerPenalty() {
     sfx.score();
     const isHome = state.possession === 'home';
-    const nextSpot = isHome ? Math.min(99, state.ballOn + 15) : Math.max(1, state.ballOn - 15);
-    state.ballOn = nextSpot;
+    state.ballOn = isHome ? Math.min(99, state.ballOn + 15) : Math.max(1, state.ballOn - 15);
     resetFirstDownMarkers();
     renderFieldAndScoreboard();
-    setStatus(`Joker Penalty enforced: +15 yards & automatic 1st Down at ${formatSpotLabel(state.ballOn, state.possession)}.`);
+    setStatus(`King + Joker Penalty: +15 yds & 1st Down at ${formatSpotLabel(state.ballOn, state.possession)}.`);
     openDealPrompt(
-      'Offensive Joker Penalty',
+      'King + Joker Penalty',
       '+15 Yards & 1st Down',
-      '15-yard penalty enforced with an automatic 1st Down. Deal +7 cards to Offense and +5 cards to Defense.',
-      'firstdown'
+      '15-yard penalty enforced with an automatic 1st Down. Deal +7 cards to Offense and +5 cards to Defense.'
     );
   }
 
   // =========================================================================
-  // DELAY OF GAME & QUARTER END MODALS
+  // FINAL 3 SECONDS (Q2 & Q4) + HAIL MARY DYNAMIC
   // =========================================================================
-  function openDelayOfGameModal() {
-    setStatus('Play clock expired (:00). Resolve Delay of Game penalty.');
-    openModal(dom.modalDelayOfGame);
+  function openFinalSecondsModal() {
+    const periodName = state.quarter === 2 ? '1st Half (Q2)' : 'Regulation (Q4)';
+    const fgTarget = getFGTargetDistance();
+    const tdDist = getYardsToEndzone();
+    dom.finalSecondsKicker.textContent = `0:03 Left in ${periodName}`;
+    dom.finalSecondsDetail.textContent = `Ball on ${formatSpotLabel(state.ballOn, state.possession)} · FG Target: ${fgTarget} yds · Endzone: ${tdDist} yds away.`;
+    openModal(dom.modalFinalSeconds);
   }
 
-  function openQuarterEndModal() {
+  function openHailMaryModal() {
+    state.hailMaryOffenseCards = [];
+    state.hailMaryDefenseCards = [];
+    renderHailMaryUI();
+    openModal(dom.modalHailMary);
+  }
+
+  function evaluateHailMary() {
+    const target = getYardsToEndzone();
+    const hasOffJoker = state.hailMaryOffenseCards.some((c) => c.type === 'joker');
+    const hasOffQueen = state.hailMaryOffenseCards.some((c) => c.type === 'queen');
+    const hasDefJoker = state.hailMaryDefenseCards.some((c) => c.type === 'joker');
+
+    if (hasDefJoker) {
+      return {
+        outcome: 'int',
+        text: 'Defense Joker — INTERCEPTED in the endzone!',
+      };
+    }
+
+    if (hasOffJoker) {
+      return {
+        outcome: 'td',
+        text: 'Offense Joker — MIRACLE HAIL MARY TOUCHDOWN!',
+      };
+    }
+
+    let offRaw = 0;
+    state.hailMaryOffenseCards.forEach((c) => {
+      if (c.type === 'ace') offRaw += hasOffQueen ? 11 : 1;
+      else offRaw += Number(c.val);
+    });
+    const offBomb = offRaw * 2;
+
+    let defSum = 0;
+    state.hailMaryDefenseCards.forEach((c) => {
+      defSum += Number(c.val);
+    });
+
+    const net = offBomb - defSum;
+    const isTD = state.hailMaryOffenseCards.length > 0 && net >= target;
+
+    return {
+      outcome: isTD ? 'td' : 'incomplete',
+      net,
+      text: `Off (${offRaw} × 2 = ${offBomb}) − Def (${defSum}) = ${net} yds (${isTD ? 'TOUCHDOWN!' : `Needs ${target} yds`})`,
+    };
+  }
+
+  function renderHailMaryUI() {
+    dom.hailMaryTargetText.textContent = `${getYardsToEndzone()} Yards`;
+    dom.labelHMOffense.textContent = `Offense Bomb (${state.hailMaryOffenseCards.length}/3)`;
+    dom.labelHMDefense.textContent = `Defense Prevent (${state.hailMaryDefenseCards.length}/2)`;
+
+    renderCardTokens(dom.chipsHMOffense, state.hailMaryOffenseCards, (idx) => {
+      state.hailMaryOffenseCards.splice(idx, 1);
+      renderHailMaryUI();
+    });
+    renderCardTokens(dom.chipsHMDefense, state.hailMaryDefenseCards, (idx) => {
+      state.hailMaryDefenseCards.splice(idx, 1);
+      renderHailMaryUI();
+    });
+
+    const result = evaluateHailMary();
+    dom.hailMaryMathText.textContent = result.text;
+  }
+
+  // =========================================================================
+  // QUARTER END, HALFTIME & OVERTIME (TIED AFTER Q4 ONLY, 2:00 + COIN FLIP)
+  // =========================================================================
+  function handleQuarterExpired() {
+    state.isFinalSecondsPlay = false;
+    clearVictoryModalState();
+
     if (state.quarter === 2) {
+      // Halftime
       dom.quarterEndKicker.textContent = 'End of 1st Half';
       dom.titleQuarterEnd.textContent = 'Halftime';
       dom.quarterEndBody.textContent =
-        'Halftime! Discard both hands completely and reshuffle the entire 54-card deck before starting Quarter 3.';
-      dom.btnConfirmQuarterEnd.textContent = 'Reshuffle & Start Q3';
-    } else if (state.quarter >= 4) {
-      const winnerText =
-        state.scoreHome === state.scoreAway
-          ? `Tied ${state.scoreHome} - ${state.scoreAway}. Start Overtime or begin a new game.`
-          : `${state.scoreHome > state.scoreAway ? 'Home' : 'Away'} leads ${state.scoreHome} - ${state.scoreAway}.`;
-      dom.quarterEndKicker.textContent = state.quarter === 4 ? 'End of Regulation' : 'End of Overtime';
-      dom.titleQuarterEnd.textContent = state.scoreHome === state.scoreAway ? 'Overtime Needed' : 'Game Final';
-      dom.quarterEndBody.textContent = winnerText;
-      dom.btnConfirmQuarterEnd.textContent = state.scoreHome === state.scoreAway ? 'Start Overtime' : 'Continue / Add OT';
-    } else {
-      dom.quarterEndKicker.textContent = `End of Q${state.quarter}`;
-      dom.titleQuarterEnd.textContent = `Quarter ${state.quarter} Complete`;
-      dom.quarterEndBody.textContent = `Ready to start Quarter ${state.quarter + 1}. Keep current hands and field position.`;
-      dom.btnConfirmQuarterEnd.textContent = `Start Q${state.quarter + 1}`;
+        'Discard both hands and reshuffle the entire 54-card deck before the 2nd-half kickoff.';
+      dom.btnConfirmQuarterEnd.textContent = 'Reshuffle & Start Q3 Kickoff';
+      openModal(dom.modalQuarterEnd);
+      return;
     }
+
+    if (state.quarter >= 4) {
+      if (state.scoreHome === state.scoreAway) {
+        // Tied after Q4 (or still tied after OT) -> Overtime Coin Flip!
+        openOvertimeCoinFlipModal();
+      } else {
+        // Not tied -> Game Final Victory Celebration!
+        const winnerTeam = state.scoreHome > state.scoreAway ? 'home' : 'away';
+        const winnerName = teamLabel(winnerTeam);
+        dom.quarterEndCard.classList.add('is-victory', winnerTeam === 'home' ? 'victory-home' : 'victory-away');
+        dom.victoryTrophyWrap.hidden = false;
+        dom.victoryScoreStrip.hidden = false;
+        dom.victoryFinalHome.textContent = String(state.scoreHome);
+        dom.victoryFinalAway.textContent = String(state.scoreAway);
+        dom.victoryColHome.classList.toggle('is-winner', winnerTeam === 'home');
+        dom.victoryColAway.classList.toggle('is-winner', winnerTeam === 'away');
+
+        dom.quarterEndKicker.textContent = 'Game Final · Champions';
+        dom.titleQuarterEnd.textContent = `${winnerName} Wins!`;
+        dom.quarterEndBody.textContent = `${winnerName} claims the victory in Deck Football!`;
+        dom.btnConfirmQuarterEnd.textContent = 'Start New Game';
+
+        sfx.victory();
+        openModal(dom.modalQuarterEnd);
+        launchConfetti('victory', winnerTeam);
+      }
+      return;
+    }
+
+    // End of Q1 or Q3
+    dom.quarterEndKicker.textContent = `End of Q${state.quarter}`;
+    dom.titleQuarterEnd.textContent = `Quarter ${state.quarter} Complete`;
+    dom.quarterEndBody.textContent = `Begin Quarter ${state.quarter + 1} with current hands and ball spot.`;
+    dom.btnConfirmQuarterEnd.textContent = `Start Q${state.quarter + 1}`;
     openModal(dom.modalQuarterEnd);
   }
 
-  function advanceQuarter() {
+  function openOvertimeCoinFlipModal() {
+    state.otCoinWinner = null;
+    dom.otCoinDisc.textContent = 'COIN';
+    dom.otCoinDisc.classList.remove('is-flipping');
+    dom.otStatusText.textContent = `Tied ${state.scoreHome}–${state.scoreAway}! Flip the coin to decide first possession for the 2:00 Overtime period.`;
+    dom.btnFlipOTCoin.hidden = false;
+    dom.otChoiceRow.hidden = true;
+    openModal(dom.modalOvertime);
+  }
+
+  function startOvertimeWithReceiver(receivingTeam) {
+    closeModal(dom.modalOvertime, false);
     state.quarter += 1;
-    state.gameTimeRemaining = state.quarterLengthMinutes * 60;
+    state.gameTimeRemaining = OT_DURATION_SECONDS; // Strictly 2:00
     resetPlayClock(false);
-    if (state.quarter === 3) {
-      state.offenseHandCount = FRESH_DRIVE_OFFENSE;
-      state.defenseHandCount = FRESH_DRIVE_DEFENSE;
-      setStatus('Halftime complete. Deck reshuffled for Quarter 3.');
-    } else {
-      setStatus(`Quarter ${state.quarter <= 4 ? state.quarter : `OT${state.quarter - 4}`} ready.`);
-    }
     renderFieldAndScoreboard();
+    openKickoffModal('overtime', receivingTeam);
   }
 
   // =========================================================================
-  // PLAY CALCULATOR LOGIC
+  // PLAY CALCULATOR (v4 ALWAYS ACTIVE; OFF ACE = 1 WITHOUT QUEEN, 11 WITH Q)
   // =========================================================================
   function evaluatePlayCalculator() {
-    const manualOffStr = dom.inputOffenseSum.value.trim();
-    const manualDefStr = dom.inputDefenseSum.value.trim();
-    const usingManual = manualOffStr !== '' || manualDefStr !== '';
-
     const hasOffJoker = state.offenseCards.some((c) => c.type === 'joker');
     const hasOffKing = state.offenseCards.some((c) => c.type === 'king');
     const hasOffQueen = state.offenseCards.some((c) => c.type === 'queen');
@@ -672,70 +1018,58 @@
     const hasDefKing = state.defenseCards.some((c) => c.type === 'king');
     const hasDefAce = state.defenseCards.some((c) => c.type === 'ace');
 
-    // Special Combo 1: Offense K + Joker => +15y Penalty & Automatic 1st Down
-    if (!usingManual && hasOffJoker && hasOffKing) {
+    // Offense King + Joker -> Offensive Penalty (+15y & Auto 1st Down)
+    if (hasOffJoker && hasOffKing) {
       return {
         outcome: 'penalty',
         net: 15,
         displayText: '+15 Yds & 1st Down',
-        subtext: 'Offense played King + Joker: 15-yard penalty and automatic 1st Down.',
+        subtext: 'Offense King + Joker played! Enforce +15y penalty & automatic 1st Down.',
         ctaText: 'Enforce +15y Penalty & 1st Down',
       };
     }
 
-    // Special Combo 2: Defense K + Joker => Turnover unless Offense plays King
-    if (!usingManual && hasDefJoker && hasDefKing && !hasOffKing) {
+    // Defense King + Joker -> Turnover unless Offense plays King
+    if (hasDefJoker && hasDefKing && !hasOffKing) {
       return {
         outcome: 'turnover',
         net: 0,
         displayText: 'Turnover',
-        subtext: 'Defense played King + Joker with no Offensive King to block.',
+        subtext: 'Defense King + Joker! No Offensive King to protect the ball.',
         ctaText: 'Confirm Turnover',
       };
     }
 
-    // Calculate card sums
+    // Offense sum (v4: Ace & Solo Joker = 11 with Queen, else 1)
     let offSum = 0;
-    if (manualOffStr !== '') {
-      offSum = Math.max(0, Number(manualOffStr) || 0);
-    } else {
-      state.offenseCards.forEach((c) => {
-        if (c.type === 'ace' || c.type === 'joker') {
-          if (state.aceMode === 'standard') {
-            offSum += 11;
-          } else {
-            offSum += hasOffQueen ? 11 : 5;
-          }
-        } else {
-          offSum += Number(c.val);
-        }
-      });
-    }
+    state.offenseCards.forEach((c) => {
+      if (c.type === 'ace' || c.type === 'joker') {
+        offSum += hasOffQueen ? 11 : 1;
+      } else {
+        offSum += Number(c.val);
+      }
+    });
 
+    // Defense sum (v4: Ace & Solo Joker = 11)
     let defSum = 0;
-    if (manualDefStr !== '') {
-      defSum = Math.max(0, Number(manualDefStr) || 0);
-    } else {
-      state.defenseCards.forEach((c) => {
-        if (c.type === 'ace' || c.type === 'joker') {
-          defSum += 11;
-        } else {
-          defSum += Number(c.val);
-        }
-      });
-    }
+    state.defenseCards.forEach((c) => {
+      if (c.type === 'ace' || c.type === 'joker') {
+        defSum += 11;
+      } else {
+        defSum += Number(c.val);
+      }
+    });
 
     const rawDiff = offSum - defSum;
     let net = rawDiff;
     const defSackCap = hasDefAce || hasDefJoker ? -10 : -5;
-
     if (rawDiff < 0) {
       net = Math.max(defSackCap, rawDiff);
     }
 
     let subtext = `Offense ${offSum} − Defense ${defSum} = ${net >= 0 ? '+' : ''}${net} yds`;
     if (hasDefJoker && hasDefKing && hasOffKing) {
-      subtext = `Turnover blocked by Offense King! ${subtext}`;
+      subtext = `Turnover blocked by Offense K! ${subtext}`;
     } else if (rawDiff < 0 && net !== rawDiff) {
       subtext += ` (Clamped at ${defSackCap}y)`;
     }
@@ -750,15 +1084,13 @@
   }
 
   function renderPlayCalcUI() {
-    dom.btnOffAceKey.textContent = state.aceMode === 'standard' ? 'Ace (11)' : 'Ace (5 / 11 w/ Q)';
-    dom.labelOffenseCount.textContent = `Offense Cards (${state.offenseCards.length}/${PLAY_CARD_LIMIT})`;
-    dom.labelDefenseCount.textContent = `Defense Cards (${state.defenseCards.length}/${PLAY_CARD_LIMIT})`;
+    dom.labelOffenseCount.textContent = `Offense (${state.offenseCards.length}/${PLAY_CARD_LIMIT})`;
+    dom.labelDefenseCount.textContent = `Defense (${state.defenseCards.length}/${PLAY_CARD_LIMIT})`;
 
     renderCardTokens(dom.chipsOffense, state.offenseCards, (idx) => {
       state.offenseCards.splice(idx, 1);
       renderPlayCalcUI();
     });
-
     renderCardTokens(dom.chipsDefense, state.defenseCards, (idx) => {
       state.defenseCards.splice(idx, 1);
       renderPlayCalcUI();
@@ -770,6 +1102,12 @@
     dom.calcDiffText.classList.toggle('is-positive', result.outcome === 'penalty' || result.net > 0);
     dom.calcOutcomeSubtext.textContent = result.subtext;
     dom.btnApplyPlayCalc.textContent = result.ctaText;
+    dom.btnApplyPlayCalc.className =
+      result.outcome === 'penalty'
+        ? 'btn-amber-full'
+        : result.outcome === 'turnover'
+          ? 'btn-danger-full'
+          : 'btn-primary-full';
   }
 
   function renderCardTokens(container, cards, onRemove) {
@@ -777,7 +1115,7 @@
     if (cards.length === 0) {
       const empty = document.createElement('span');
       empty.className = 'selected-empty';
-      empty.textContent = 'No cards selected';
+      empty.textContent = 'None';
       container.appendChild(empty);
       return;
     }
@@ -809,7 +1147,7 @@
 
     if (isSafety) {
       dom.puntTitle.textContent = 'Safety Free Kick (Own 20)';
-      dom.puntDesc.textContent = 'Conceding team kicks from their own 20-yard line using punt rules.';
+      dom.puntDesc.textContent = 'Conceding team kicks from own 20 using punt rules.';
     } else {
       dom.puntTitle.textContent = '4th Down Punt';
       dom.puntDesc.textContent = 'Val × 5y, Face = 45y, Ace = 50y. Defense plays 1 return card.';
@@ -824,7 +1162,6 @@
       state.puntKickCard = null;
       renderPuntUI();
     });
-
     renderCardTokens(dom.chipsPuntReturn, state.puntReturnCard ? [state.puntReturnCard] : [], () => {
       state.puntReturnCard = null;
       renderPuntUI();
@@ -832,8 +1169,8 @@
 
     if (state.puntKickCard && state.puntKickCard.val === 'JOKER') {
       dom.puntNetText.textContent = 'Muffed Punt!';
-      dom.puntNetText.className = 'result-value is-negative';
-      dom.puntLandingPreview.textContent = 'Joker drawn on empty-hand punt — immediate turnover at LOS.';
+      dom.puntNetText.className = 'result-value-md is-negative';
+      dom.puntLandingPreview.textContent = 'Joker drawn — immediate turnover at LOS.';
       return;
     }
 
@@ -842,43 +1179,41 @@
     const net = Math.max(0, kickYards - returnYards);
 
     dom.puntNetText.textContent = `${net} Net Yards`;
-    dom.puntNetText.className = 'result-value';
+    dom.puntNetText.className = 'result-value-md';
 
     if (!state.puntKickCard) {
-      dom.puntLandingPreview.textContent = 'Select a punt card (or defaults to 35y kick on execute).';
+      dom.puntLandingPreview.textContent = 'Select a punt card (defaults to 35y if none picked).';
       return;
     }
 
     const isHome = state.possession === 'home';
     const rawLanding = isHome ? state.ballOn + net : state.ballOn - net;
     const isTouchback = (isHome && rawLanding >= 100) || (!isHome && rawLanding <= 0);
-    const nextPossession = isHome ? 'away' : 'home';
+    const nextPoss = isHome ? 'away' : 'home';
 
-    if (isTouchback) {
-      dom.puntLandingPreview.textContent = `Touchback! ${nextPossession === 'home' ? 'Home' : 'Away'} starts at Own 20.`;
-    } else {
-      const spot = clamp(rawLanding, 1, 99);
-      dom.puntLandingPreview.textContent = `Kick ${kickYards}y − Return ${returnYards}y · ${
-        nextPossession === 'home' ? 'Home' : 'Away'
-      } starts at ${formatSpotLabel(spot, nextPossession)}.`;
-    }
+    dom.puntLandingPreview.textContent = isTouchback
+      ? `Touchback! ${teamLabel(nextPoss)} starts at Own 20.`
+      : `Kick ${kickYards}y − Ret ${returnYards}y · ${teamLabel(nextPoss)} at ${formatSpotLabel(clamp(rawLanding, 1, 99), nextPoss)}.`;
   }
 
   // =========================================================================
-  // FIELD GOAL MODAL LOGIC
+  // FIELD GOAL MODAL LOGIC (MANUAL PHYSICAL CARDS ONLY)
   // =========================================================================
-  function getFGTargetDistance() {
-    const isHome = state.possession === 'home';
-    const yardsToGoal = isHome ? 100 - state.ballOn : state.ballOn;
-    return yardsToGoal + 10;
+  function openFieldGoalModal() {
+    state.fgOffenseCards = [];
+    state.fgDefenseCards = [];
+    renderFGUI();
+    openModal(dom.modalFG);
   }
 
   function renderFGUI() {
+    dom.labelFGOffense.textContent = `Offense Kick (${state.fgOffenseCards.length}/8)`;
+    dom.labelFGDefense.textContent = `Defense Block (${state.fgDefenseCards.length}/2)`;
+
     renderCardTokens(dom.chipsFGOffense, state.fgOffenseCards, (idx) => {
       state.fgOffenseCards.splice(idx, 1);
       renderFGUI();
     });
-
     renderCardTokens(dom.chipsFGDefense, state.fgDefenseCards, (idx) => {
       state.fgDefenseCards.splice(idx, 1);
       renderFGUI();
@@ -892,67 +1227,167 @@
     const defSum = state.fgDefenseCards.reduce((sum, c) => (c.val === 'JOKER' ? sum : sum + Number(c.val)), 0);
     const net = offSum - defSum;
 
-    if (isBlocked) {
-      dom.fgMathText.textContent = `Offense (${offSum}) · Blocked by Defense Joker!`;
+    dom.fgMathText.textContent = isBlocked
+      ? `Offense (${offSum}) · Blocked by Defense Joker!`
+      : `Offense (${offSum}) − Defense (${defSum}) = ${net} Net (${net > target ? 'GOOD' : `Needs > ${target}`})`;
+  }
+
+  // =========================================================================
+  // TOUCHDOWN 3-PHASE WORKFLOW & UNIFIED KICKOFF / PHYSICAL RETURN
+  // =========================================================================
+  function openTouchdownPhase1() {
+    dom.tdChoiceDetail.textContent = `${teamLabel(state.possession)} scored! Choose your Point After Touchdown attempt:`;
+    openModal(dom.modalTDChoice);
+  }
+
+  function openTouchdownPhase2(points) {
+    state.pendingPATPoints = points;
+    closeModal(dom.modalTDChoice, false);
+    dom.titlePATResult.textContent = points === 1 ? '1-Point Kick' : '2-Point Try';
+    dom.patResultPrompt.textContent =
+      points === 1 ? 'Was the flipped card 4 or higher (Good)?' : 'Did Offense beat Defense on the 1-card snap?';
+    openModal(dom.modalPATResult);
+  }
+
+  function openOpeningCoinFlipModal() {
+    state.openingCoinWinner = null;
+    dom.openingCoinDisc.textContent = 'COIN';
+    dom.openingCoinDisc.classList.remove('is-flipping');
+    dom.openingCoinStatus.innerHTML =
+      '<strong class="away-text">Away</strong> calls the coin toss in the air. Pick Heads or Tails to flip:';
+    dom.openingCallRow.hidden = false;
+    dom.openingChoiceRow.hidden = true;
+    openModal(dom.modalOpeningCoinFlip);
+  }
+
+  function resolveOpeningCoinCall(awayCall) {
+    dom.openingCallRow.hidden = true;
+    dom.openingCoinDisc.classList.remove('is-flipping');
+    void dom.openingCoinDisc.offsetWidth;
+    dom.openingCoinDisc.classList.add('is-flipping');
+    dom.openingCoinDisc.textContent = '...';
+    dom.openingCoinStatus.textContent = `Away called ${awayCall}! Flipping coin...`;
+    sfx.whistle();
+
+    setTimeout(() => {
+      const flipResult = Math.random() < 0.5 ? 'Heads' : 'Tails';
+      const awayWon = flipResult === awayCall;
+      state.openingCoinWinner = awayWon ? 'away' : 'home';
+      dom.openingCoinDisc.textContent = flipResult.toUpperCase();
+      dom.openingCoinStatus.textContent = `It's ${flipResult}! ${teamLabel(state.openingCoinWinner)} wins the toss. Choose to Receive First or Defer to the 2nd Half:`;
+      dom.openingChoiceRow.hidden = false;
+    }, 650);
+  }
+
+  function openKickoffModal(context, receivingTeam) {
+    state.kickoffContext = context;
+    state.kickoffReceivingTeam = receivingTeam;
+
+    if (context === 'opening') {
+      dom.kickoffKicker.textContent = 'Start of Game';
+      dom.titleKickoff.textContent = 'Opening Kickoff';
+    } else if (context === 'halftime') {
+      dom.kickoffKicker.textContent = 'Start of 2nd Half (Q3)';
+      dom.titleKickoff.textContent = '2nd Half Kickoff';
+    } else if (context === 'overtime') {
+      dom.kickoffKicker.textContent = 'Overtime (2:00)';
+      dom.titleKickoff.textContent = 'Overtime Kickoff';
     } else {
-      const verdict = net > target ? 'GOOD' : `Needs > ${target}`;
-      dom.fgMathText.textContent = `Offense (${offSum}) − Defense (${defSum}) = ${net} Net (${verdict})`;
+      dom.kickoffKicker.textContent = 'Step 3 of 3 · Kickoff';
+      dom.titleKickoff.textContent = 'Kickoff to Opponent';
+    }
+
+    updateKickoffCopy();
+    openModal(dom.modalKickoff);
+  }
+
+  function updateKickoffCopy() {
+    dom.kickoffDetail.textContent = `${teamLabel(state.kickoffReceivingTeam)} receives the kickoff. Choose Touchback (Own 25) or input 4 drawn return cards.`;
+  }
+
+  function finishKickoffPlacement(yardSpot, kickerTitle, bodyText) {
+    const rec = state.kickoffReceivingTeam;
+    if (state.kickoffContext === 'opening') {
+      state.openingReceiver = rec;
+    }
+    state.possession = rec;
+    state.ballOn = clamp(yardSpot, 1, 99);
+    resetFirstDownMarkers();
+    renderFieldAndScoreboard();
+    setStatus(bodyText);
+    openDealPrompt(
+      kickerTitle,
+      `${teamLabel(rec)} · 1st & 10`,
+      `${bodyText} Deal 8 cards to ${teamLabel(rec)} (Offense) and 5 cards to Defense.`
+    );
+  }
+
+  function renderKickReturnUI() {
+    dom.labelKickReturnCount.textContent = `Return Cards (${state.kickReturnCards.length}/4)`;
+    renderCardTokens(dom.chipsKickReturn, state.kickReturnCards, (idx) => {
+      state.kickReturnCards.splice(idx, 1);
+      renderKickReturnUI();
+    });
+
+    const total = state.kickReturnCards.reduce((sum, c) => sum + Number(c.val), 0);
+    dom.kickReturnTotalText.textContent = `${total} Yards`;
+
+    if (total === 0) {
+      dom.kickReturnSpotText.textContent = 'Tap up to 4 physical cards drawn from the deck.';
+    } else {
+      const rec = state.kickoffReceivingTeam;
+      const spotYard = rec === 'home' ? clamp(total, 1, 99) : clamp(100 - total, 1, 99);
+      dom.kickReturnSpotText.textContent = `${teamLabel(rec)} will start 1st & 10 at ${formatSpotLabel(spotYard, rec)}.`;
     }
   }
 
   // =========================================================================
-  // TOUCHDOWN & KICKOFF HELPERS
+  // NEW GAME RESET HELPER
   // =========================================================================
-  function openTouchdownModal() {
-    dom.patConfirmBox.hidden = true;
-    dom.kickoffBox.hidden = true;
-    openModal(dom.modalTD);
-  }
+  function startFreshGame(mins) {
+    stopConfetti();
+    clearVictoryModalState();
+    pauseGameClock();
+    pausePlayClock();
 
-  function resolveKickoffTouchback(sourceModal) {
-    closeModal(sourceModal, false);
-    const isHome = state.possession === 'home';
-    const landing = isHome ? 75 : 25;
-    switchPossession(landing);
-    setStatus(`Touchback! ${state.possession === 'home' ? 'Home' : 'Away'} takes over at Own 25.`);
-    openDealPrompt(
-      'Touchback',
-      'Own 25-Yard Line',
-      'Ball placed on the receiving team’s 25-yard line. Deal 8 cards to new Offense and 5 cards to Defense.',
-      'fresh'
-    );
-  }
+    state.scoreHome = 0;
+    state.scoreAway = 0;
+    state.possession = 'home';
+    state.openingReceiver = 'home';
+    state.ballOn = 25;
+    state.down = 1;
+    state.lineGain = 35;
+    state.distance = 10;
+    state.quarter = 1;
+    state.quarterLengthMinutes = mins;
+    state.gameTimeRemaining = mins * 60;
+    state.playClockTime = PLAY_CLOCK_DEFAULT;
+    state.playClockExpired = false;
+    state.finalSecondsWarnedQ2 = false;
+    state.finalSecondsWarnedQ4 = false;
+    state.isFinalSecondsPlay = false;
+    state.isCelebratingTD = false;
 
-  function resolveKickoffReturn(sourceModal) {
-    closeModal(sourceModal, false);
-    let returnYards = 0;
-    for (let i = 0; i < 4; i += 1) {
-      returnYards += Math.floor(Math.random() * 9) + 2; // 4 cards (2–10 each)
-    }
-    const isHome = state.possession === 'home';
-    const landing = clamp(isHome ? 100 - returnYards : returnYards, 1, 99);
-    switchPossession(landing);
-    setStatus(`Kickoff returned ${returnYards} yards to ${formatSpotLabel(landing, state.possession)}.`);
-    openDealPrompt(
-      'Kick Return',
-      `Returned ${returnYards} Yards`,
-      `Ball spotted at ${formatSpotLabel(landing, state.possession)}. Deal 8 cards to new Offense and 5 cards to Defense.`,
-      'fresh'
-    );
+    syncQuarterLengthButtons();
+    renderFieldAndScoreboard();
+    openOpeningCoinFlipModal();
   }
 
   // =========================================================================
   // EVENT LISTENERS
   // =========================================================================
   function bindEvents() {
-    // Sound toggle
+    // Sound toggle (speaker emoji)
     $('btnToggleSound').addEventListener('click', (e) => {
       state.soundEnabled = !state.soundEnabled;
+      const label = state.soundEnabled ? 'Sound On' : 'Sound Off';
       e.currentTarget.setAttribute('aria-pressed', String(state.soundEnabled));
-      e.currentTarget.textContent = state.soundEnabled ? 'Sound On' : 'Sound Off';
+      e.currentTarget.setAttribute('aria-label', label);
+      e.currentTarget.title = label;
+      e.currentTarget.textContent = state.soundEnabled ? '🔊' : '🔇';
     });
 
-    // Quarter length segmented controls (Header)
+    // Quarter length segmented control (Header)
     document.querySelectorAll('#quarterLengthSelector .seg-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const mins = Number(btn.dataset.mins);
@@ -961,11 +1396,13 @@
       });
     });
 
-    // Quarter clock Start / Pause
-    dom.btnToggleGameClock.addEventListener('click', () => {
-      if (state.gameClockRunning) {
+    // SINGLE Unified Timeout / Start Clock button
+    dom.btnTimeoutToggle.addEventListener('click', () => {
+      const anyRunning = state.gameClockRunning || state.playClockRunning;
+      if (anyRunning) {
         pauseGameClock();
         pausePlayClock();
+        setStatus('Timeout called — clocks paused.');
       } else {
         startGameClock();
         if (!state.playClockExpired) {
@@ -975,128 +1412,71 @@
             resetPlayClock(true);
           }
         }
+        setStatus('Clocks running.');
       }
     });
 
-    // Play clock dedicated Start / Pause / Reset controls
-    dom.btnStartPlayClock.addEventListener('click', () => startPlayClock());
-    dom.btnPausePlayClock.addEventListener('click', () => pausePlayClock());
-    dom.btnResetPlayClock.addEventListener('click', () => resetPlayClock(false));
-
-    // Ball Spot Scrubber
-    dom.ballScrubber.addEventListener('input', (e) => {
-      state.ballOn = clamp(Number(e.target.value), 1, 99);
-      renderFieldAndScoreboard();
+    dom.btnResetPlayClock.addEventListener('click', () => {
+      resetPlayClock(state.gameClockRunning);
+      setStatus('Play clock reset to :30.');
     });
 
-    // Hand Tracker +/- buttons
-    $('btnOffHandDec').addEventListener('click', () => {
-      state.offenseHandCount = Math.max(0, state.offenseHandCount - 1);
-      renderHandTracker();
-    });
-    $('btnOffHandInc').addEventListener('click', () => {
-      state.offenseHandCount = Math.min(HAND_LIMIT, state.offenseHandCount + 1);
-      renderHandTracker();
-    });
-    $('btnDefHandDec').addEventListener('click', () => {
-      state.defenseHandCount = Math.max(0, state.defenseHandCount - 1);
-      renderHandTracker();
-    });
-    $('btnDefHandInc').addEventListener('click', () => {
-      state.defenseHandCount = Math.min(HAND_LIMIT, state.defenseHandCount + 1);
-      renderHandTracker();
-    });
+    // Contextual 4th Down trigger (only visible on 4th down)
+    dom.btnOpenFourthDown.addEventListener('click', () => openFourthDownModal());
 
-    // Situation Action Buttons
+    // Situation Actions (Turnover & 1st & 10)
     $('btnTriggerTurnover').addEventListener('click', () => {
       sfx.buzzer();
       switchPossession();
-      setStatus(`Turnover! ${state.possession === 'home' ? 'Home' : 'Away'} takes over.`);
+      setStatus(`Turnover! ${teamLabel(state.possession)} takes over.`);
       openDealPrompt(
         'Change of Possession',
         'Turnover',
-        'Defense takes over at the spot. Deal 8 cards to the new Offense and 5 cards to Defense.',
-        'fresh'
+        'Defense takes over at the spot. Deal 8 cards to the new Offense and 5 cards to Defense.'
       );
     });
-
-    $('btnTriggerPunt').addEventListener('click', () => openPuntModal(false));
-
-    $('btnTriggerFG').addEventListener('click', () => {
-      state.fgOffenseCards = [];
-      state.fgDefenseCards = [];
-      renderFGUI();
-      openModal(dom.modalFG);
-    });
-
-    $('btnTriggerJokerPenalty').addEventListener('click', () => enforceOffensiveJokerPenalty());
 
     $('btnForceFirstDown').addEventListener('click', () => {
       sfx.score();
       resetFirstDownMarkers();
       renderFieldAndScoreboard();
       setStatus(`Chains reset to 1st & 10 at ${formatSpotLabel(state.ballOn, state.possession)}.`);
-      openDealPrompt(
-        'First Down Reset',
-        '1st & 10',
-        'Deal +7 cards to Offense and +5 cards to Defense (12-card maximum).',
-        'firstdown'
-      );
+      openDealPrompt('First Down Reset', '1st & 10', 'Deal +7 cards to Offense and +5 cards to Defense (12-card max).');
     });
 
-    // Quick Yardage Buttons (-10 to +15)
+    // Quick Yardage (-10 to +15)
     document.querySelectorAll('.btn-yard').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        applyPlayYardage(Number(btn.dataset.yard));
-      });
+      btn.addEventListener('click', () => applyPlayYardage(Number(btn.dataset.yard)));
     });
 
-    // ================= PLAY CALC MODAL EVENTS =================
+    // ================= PLAY CALC MODAL =================
     $('btnOpenPlayCalc').addEventListener('click', () => {
       state.offenseCards = [];
       state.defenseCards = [];
-      dom.inputOffenseSum.value = '';
-      dom.inputDefenseSum.value = '';
       renderPlayCalcUI();
       openModal(dom.modalPlayCalc);
     });
-
     $('btnClosePlayCalc').addEventListener('click', () => closeModal(dom.modalPlayCalc, true));
 
-    document.querySelectorAll('#aceModeSelector .seg-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        state.aceMode = btn.dataset.aceMode;
-        document.querySelectorAll('#aceModeSelector .seg-btn').forEach((b) => {
-          b.classList.toggle('active', b.dataset.aceMode === state.aceMode);
-        });
-        renderPlayCalcUI();
-      });
-    });
-
-    dom.inputOffenseSum.addEventListener('input', renderPlayCalcUI);
-    dom.inputDefenseSum.addEventListener('input', renderPlayCalcUI);
-
-    document.querySelectorAll('#keysOffense .btn-key').forEach((btn) => {
+    document.querySelectorAll('#keysOffense .btn-key-sm').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (state.offenseCards.length >= PLAY_CARD_LIMIT) return;
-        dom.inputOffenseSum.value = '';
         state.offenseCards.push({
           type: btn.dataset.type,
           val: btn.dataset.val,
-          label: btn.dataset.type === 'ace' ? 'Ace' : btn.dataset.type === 'joker' ? 'Joker' : btn.textContent.split(' ')[0],
+          label: btn.textContent,
         });
         renderPlayCalcUI();
       });
     });
 
-    document.querySelectorAll('#keysDefense .btn-key').forEach((btn) => {
+    document.querySelectorAll('#keysDefense .btn-key-sm').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (state.defenseCards.length >= PLAY_CARD_LIMIT) return;
-        dom.inputDefenseSum.value = '';
         state.defenseCards.push({
           type: btn.dataset.type,
           val: btn.dataset.val,
-          label: btn.dataset.type === 'ace' ? 'Ace' : btn.dataset.type === 'joker' ? 'Joker' : btn.textContent.split(' ')[0],
+          label: btn.textContent,
         });
         renderPlayCalcUI();
       });
@@ -1104,55 +1484,125 @@
 
     $('btnClearOffense').addEventListener('click', () => {
       state.offenseCards = [];
-      dom.inputOffenseSum.value = '';
       renderPlayCalcUI();
     });
-
     $('btnClearDefense').addEventListener('click', () => {
       state.defenseCards = [];
-      dom.inputDefenseSum.value = '';
       renderPlayCalcUI();
     });
 
     dom.btnApplyPlayCalc.addEventListener('click', () => {
       const result = evaluatePlayCalculator();
-      const offPlayed = state.offenseCards.length;
-      const defPlayed = state.defenseCards.length;
-
-      // Deduct played cards from tracked hands
-      state.offenseHandCount = Math.max(0, state.offenseHandCount - offPlayed);
-      state.defenseHandCount = Math.max(0, state.defenseHandCount - defPlayed);
-      renderHandTracker();
-
       closeModal(dom.modalPlayCalc, false);
 
       if (result.outcome === 'penalty') {
         enforceOffensiveJokerPenalty();
         return;
       }
-
       if (result.outcome === 'turnover') {
         sfx.buzzer();
         switchPossession();
-        setStatus(`Defense King + Joker Turnover! ${state.possession === 'home' ? 'Home' : 'Away'} takes over.`);
+        setStatus(`Defense King + Joker Turnover! ${teamLabel(state.possession)} takes over.`);
         openDealPrompt(
           'King + Joker Steal',
           'Turnover',
-          'Defense stole the ball! Deal 8 cards to the new Offense and 5 cards to Defense.',
-          'fresh'
+          'Defense stole the ball! Deal 8 cards to the new Offense and 5 cards to Defense.'
         );
         return;
       }
-
       applyPlayYardage(result.net);
     });
 
-    $('btnCalcJokerPenalty').addEventListener('click', () => {
-      closeModal(dom.modalPlayCalc, false);
-      enforceOffensiveJokerPenalty();
+    // ================= 4TH DOWN DECISION MODAL =================
+    $('btnFourthGoForIt').addEventListener('click', () => {
+      closeModal(dom.modalFourthDown, false);
+      startGameClock();
+      resetPlayClock(true);
+      setStatus(`Going for it on 4th & ${state.distance}!`);
+    });
+    $('btnFourthPunt').addEventListener('click', () => {
+      closeModal(dom.modalFourthDown, false);
+      openPuntModal(false);
+    });
+    $('btnFourthFG').addEventListener('click', () => {
+      closeModal(dom.modalFourthDown, false);
+      openFieldGoalModal();
     });
 
-    // ================= PUNT MODAL EVENTS =================
+    // ================= FINAL 3 SECONDS & HAIL MARY =================
+    $('btnFinalSecondsFG').addEventListener('click', () => {
+      state.isFinalSecondsPlay = true;
+      closeModal(dom.modalFinalSeconds, false);
+      openFieldGoalModal();
+    });
+    $('btnFinalSecondsHailMary').addEventListener('click', () => {
+      state.isFinalSecondsPlay = true;
+      closeModal(dom.modalFinalSeconds, false);
+      openHailMaryModal();
+    });
+    $('btnFinalSecondsNormal').addEventListener('click', () => {
+      state.isFinalSecondsPlay = false;
+      closeModal(dom.modalFinalSeconds, false);
+      startGameClock();
+      startPlayClock();
+    });
+
+    $('btnCloseHailMary').addEventListener('click', () => {
+      state.isFinalSecondsPlay = false;
+      closeModal(dom.modalHailMary, true);
+    });
+
+    document.querySelectorAll('#keysHMOffense .btn-key-sm').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.hailMaryOffenseCards.length >= 3) return;
+        state.hailMaryOffenseCards.push({ type: btn.dataset.type, val: btn.dataset.val, label: btn.textContent });
+        renderHailMaryUI();
+      });
+    });
+
+    document.querySelectorAll('#keysHMDefense .btn-key-sm').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.hailMaryDefenseCards.length >= 2) return;
+        state.hailMaryDefenseCards.push({ type: btn.dataset.type, val: btn.dataset.val, label: btn.textContent });
+        renderHailMaryUI();
+      });
+    });
+
+    $('btnClearHMOffense').addEventListener('click', () => {
+      state.hailMaryOffenseCards = [];
+      renderHailMaryUI();
+    });
+    $('btnClearHMDefense').addEventListener('click', () => {
+      state.hailMaryDefenseCards = [];
+      renderHailMaryUI();
+    });
+
+    $('btnResolveHailMary').addEventListener('click', () => {
+      const result = evaluateHailMary();
+      closeModal(dom.modalHailMary, false);
+      state.gameTimeRemaining = 0; // Final play of the half/game expires the clock
+      renderClocks();
+
+      if (result.outcome === 'td') {
+        const scoringTeam = state.possession;
+        if (scoringTeam === 'home') state.scoreHome += 6;
+        else state.scoreAway += 6;
+        state.ballOn = scoringTeam === 'home' ? 99 : 1;
+        renderFieldAndScoreboard();
+        setStatus(`HAIL MARY TOUCHDOWN! ${teamLabel(scoringTeam)} scores at the buzzer (+6)!`);
+        triggerScoreboardTD(scoringTeam, () => openTouchdownPhase1());
+      } else {
+        sfx.buzzer();
+        const msg =
+          result.outcome === 'int'
+            ? 'Hail Mary INTERCEPTED by Defense Joker as time expires!'
+            : 'Hail Mary batted down incomplete as time expires!';
+        setStatus(msg);
+        handleQuarterExpired();
+      }
+    });
+
+    // ================= PUNT MODAL =================
     $('btnClosePunt').addEventListener('click', () => closeModal(dom.modalPunt, true));
 
     $('btnPuntDrawDeck').addEventListener('click', () => {
@@ -1178,14 +1628,14 @@
       renderPuntUI();
     });
 
-    document.querySelectorAll('#keysPuntKick .btn-key').forEach((btn) => {
+    document.querySelectorAll('#keysPuntKick .btn-key-sm').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.puntKickCard = { val: btn.dataset.val, label: btn.dataset.label };
         renderPuntUI();
       });
     });
 
-    document.querySelectorAll('#keysPuntReturn .btn-key').forEach((btn) => {
+    document.querySelectorAll('#keysPuntReturn .btn-key-sm').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.puntReturnCard = { val: btn.dataset.val, label: btn.dataset.label };
         renderPuntUI();
@@ -1203,13 +1653,8 @@
       if (state.puntKickCard && state.puntKickCard.val === 'JOKER') {
         sfx.buzzer();
         switchPossession();
-        setStatus('Muffed punt! Joker drawn on empty hand — immediate turnover at LOS.');
-        openDealPrompt(
-          'Muffed Punt',
-          'Turnover at Spot',
-          'Punter drew a Joker from the deck. Deal 8 cards to the new Offense and 5 cards to Defense.',
-          'fresh'
-        );
+        setStatus('Muffed punt! Joker drawn — turnover at LOS.');
+        openDealPrompt('Muffed Punt', 'Turnover at Spot', 'Deal 8 cards to the new Offense and 5 cards to Defense.');
         return;
       }
 
@@ -1231,41 +1676,32 @@
       sfx.whistle();
       switchPossession(landing);
       const detail = touchback
-        ? 'Punt resulted in a touchback to the 20-yard line.'
-        : `Punt netted ${net} yards. Ball spotted at ${formatSpotLabel(state.ballOn, state.possession)}.`;
+        ? 'Punt touchback to Own 20.'
+        : `Punt netted ${net} yds. Ball at ${formatSpotLabel(state.ballOn, state.possession)}.`;
       setStatus(detail);
       openDealPrompt(
         touchback ? 'Punt Touchback' : 'Punt Resolved',
         touchback ? 'Touchback (Own 20)' : 'Change of Possession',
-        `${detail} Deal 8 cards to the new Offense and 5 cards to Defense.`,
-        'fresh'
+        `${detail} Deal 8 cards to new Offense and 5 cards to Defense.`
       );
     });
 
-    // ================= FIELD GOAL MODAL EVENTS =================
-    $('btnCloseFG').addEventListener('click', () => closeModal(dom.modalFG, true));
-
-    $('btnAutoFGDeck').addEventListener('click', () => {
-      const deckValues = [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11];
-      for (let i = 0; i < 5; i += 1) {
-        if (state.fgOffenseCards.length >= 8) break;
-        const val = deckValues[Math.floor(Math.random() * deckValues.length)];
-        state.fgOffenseCards.push({ val, label: val === 11 ? 'Deck Ace (11)' : `Deck ${val}` });
-      }
-      renderFGUI();
+    // ================= FIELD GOAL MODAL =================
+    $('btnCloseFG').addEventListener('click', () => {
+      state.isFinalSecondsPlay = false;
+      closeModal(dom.modalFG, true);
     });
 
     $('btnClearFGOffense').addEventListener('click', () => {
       state.fgOffenseCards = [];
       renderFGUI();
     });
-
     $('btnClearFGDefense').addEventListener('click', () => {
       state.fgDefenseCards = [];
       renderFGUI();
     });
 
-    document.querySelectorAll('#keysFGOffense .btn-key').forEach((btn) => {
+    document.querySelectorAll('#keysFGOffense .btn-key-sm').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (state.fgOffenseCards.length >= 8) return;
         state.fgOffenseCards.push({ val: btn.dataset.val, label: btn.dataset.label });
@@ -1273,7 +1709,7 @@
       });
     });
 
-    document.querySelectorAll('#keysFGDefense .btn-key').forEach((btn) => {
+    document.querySelectorAll('#keysFGDefense .btn-key-sm').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (state.fgDefenseCards.length >= 2) return;
         state.fgDefenseCards.push({ val: btn.dataset.val, label: btn.dataset.label });
@@ -1290,72 +1726,174 @@
       const defSum = state.fgDefenseCards.reduce((sum, c) => (c.val === 'JOKER' ? sum : sum + Number(c.val)), 0);
       const net = offSum - defSum;
 
+      if (state.isFinalSecondsPlay) {
+        state.gameTimeRemaining = 0;
+        renderClocks();
+      }
+
       if (!isBlocked && net > target) {
         sfx.score();
         if (isHome) state.scoreHome += 3;
         else state.scoreAway += 3;
         renderFieldAndScoreboard();
-        dom.fgMadeDetail.textContent = `${isHome ? 'Home' : 'Away'} scores +3 points! Net kick of ${net} yards cleared the ${target}-yard target.`;
+        dom.fgMadeDetail.textContent = `${teamLabel(state.possession)} scores +3! Net ${net} yds cleared the ${target}-yard target.`;
+        $('btnFGProceedKickoff').textContent = state.isFinalSecondsPlay ? 'End Half / Regulation' : 'Proceed to Kickoff';
         setStatus(`Field Goal Good (+3) from ${target} yards.`);
         openModal(dom.modalFGMade);
       } else {
         sfx.buzzer();
         dom.fgMissedDetail.textContent = isBlocked
-          ? 'Kick blocked by Defense Joker! Opponent takes over at the spot of the kick.'
-          : `Kick came up short (${net} net yards; needed > ${target} yards). Opponent takes over at the spot.`;
-        setStatus(isBlocked ? 'Field Goal blocked by Defense Joker!' : `Field Goal missed (${net} vs ${target} yds).`);
+          ? 'Kick blocked by Defense Joker!'
+          : `Kick came up short (${net} net yds; needed > ${target}).`;
+        $('btnConfirmFGMissed').textContent = state.isFinalSecondsPlay ? 'End Half / Regulation' : 'Switch Possession & Deal';
+        setStatus(isBlocked ? 'Field Goal blocked by Joker!' : `Field Goal missed (${net} vs ${target} yds).`);
         openModal(dom.modalFGMissed);
       }
     });
 
-    $('btnFGKickTouchback').addEventListener('click', () => resolveKickoffTouchback(dom.modalFGMade));
-    $('btnFGKickReturnDeck').addEventListener('click', () => resolveKickoffReturn(dom.modalFGMade));
+    $('btnFGProceedKickoff').addEventListener('click', () => {
+      closeModal(dom.modalFGMade, false);
+      if (state.isFinalSecondsPlay) {
+        handleQuarterExpired();
+      } else {
+        const receiving = state.possession === 'home' ? 'away' : 'home';
+        openKickoffModal('score', receiving);
+      }
+    });
 
     $('btnConfirmFGMissed').addEventListener('click', () => {
       closeModal(dom.modalFGMissed, false);
-      switchPossession();
-      openDealPrompt(
-        'Missed Field Goal',
-        'Change of Possession',
-        `Defense takes over at ${formatSpotLabel(state.ballOn, state.possession)}. Deal 8 cards to new Offense and 5 cards to Defense.`,
-        'fresh'
+      if (state.isFinalSecondsPlay) {
+        handleQuarterExpired();
+      } else {
+        switchPossession();
+        openDealPrompt(
+          'Missed Field Goal',
+          'Change of Possession',
+          `Defense takes over at ${formatSpotLabel(state.ballOn, state.possession)}. Deal 8 cards to new Offense and 5 cards to Defense.`
+        );
+      }
+    });
+
+    // ================= 3-PHASE TOUCHDOWN FLOW =================
+    $('btnSelectPAT1').addEventListener('click', () => openTouchdownPhase2(1));
+    $('btnSelectPAT2').addEventListener('click', () => openTouchdownPhase2(2));
+
+    function finishPATPhase(succeeded) {
+      closeModal(dom.modalPATResult, false);
+      if (succeeded) {
+        sfx.score();
+        if (state.possession === 'home') state.scoreHome += state.pendingPATPoints;
+        else state.scoreAway += state.pendingPATPoints;
+        renderFieldAndScoreboard();
+        setStatus(`PAT Good (+${state.pendingPATPoints})!`);
+      } else {
+        sfx.buzzer();
+        setStatus('PAT failed.');
+      }
+
+      if (state.isFinalSecondsPlay || state.gameTimeRemaining <= 0) {
+        handleQuarterExpired();
+      } else {
+        const receiving = state.possession === 'home' ? 'away' : 'home';
+        openKickoffModal('score', receiving);
+      }
+    }
+
+    $('btnConfirmPATSuccess').addEventListener('click', () => finishPATPhase(true));
+    $('btnConfirmPATFail').addEventListener('click', () => finishPATPhase(false));
+
+    // ================= OPENING COIN FLIP =================
+    $('btnCallHeads').addEventListener('click', () => resolveOpeningCoinCall('Heads'));
+    $('btnCallTails').addEventListener('click', () => resolveOpeningCoinCall('Tails'));
+
+    $('btnOpeningReceive').addEventListener('click', () => {
+      const winner = state.openingCoinWinner || 'away';
+      closeModal(dom.modalOpeningCoinFlip, false);
+      openKickoffModal('opening', winner);
+    });
+
+    $('btnOpeningDefer').addEventListener('click', () => {
+      const winner = state.openingCoinWinner || 'away';
+      const receiver = winner === 'home' ? 'away' : 'home';
+      closeModal(dom.modalOpeningCoinFlip, false);
+      openKickoffModal('opening', receiver);
+    });
+
+    // ================= KICKOFF & PHYSICAL 4-CARD RETURN =================
+    $('btnKickoffTouchback').addEventListener('click', () => {
+      closeModal(dom.modalKickoff, false);
+      const rec = state.kickoffReceivingTeam;
+      const spot = rec === 'home' ? 25 : 75;
+      finishKickoffPlacement(spot, 'Touchback', `Touchback! ${teamLabel(rec)} starts at Own 25.`);
+    });
+
+    $('btnKickoffReturn').addEventListener('click', () => {
+      closeModal(dom.modalKickoff, false);
+      state.kickReturnCards = [];
+      dom.kickReturnSubtitle.textContent = `${teamLabel(state.kickoffReceivingTeam)} return · Tap up to 4 physical cards drawn`;
+      renderKickReturnUI();
+      openModal(dom.modalKickReturn);
+    });
+
+    $('btnCloseKickReturn').addEventListener('click', () => {
+      closeModal(dom.modalKickReturn, false);
+      openModal(dom.modalKickoff);
+    });
+
+    document.querySelectorAll('#keysKickReturn .btn-key-sm').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.kickReturnCards.length >= 4) return;
+        state.kickReturnCards.push({ val: btn.dataset.val, label: btn.dataset.label });
+        renderKickReturnUI();
+      });
+    });
+
+    $('btnClearKickReturn').addEventListener('click', () => {
+      state.kickReturnCards = [];
+      renderKickReturnUI();
+    });
+
+    $('btnApplyKickReturn').addEventListener('click', () => {
+      const total = state.kickReturnCards.reduce((sum, c) => sum + Number(c.val), 0);
+      if (total <= 0) return;
+      closeModal(dom.modalKickReturn, false);
+      const rec = state.kickoffReceivingTeam;
+      const spot = rec === 'home' ? clamp(total, 1, 99) : clamp(100 - total, 1, 99);
+      finishKickoffPlacement(
+        spot,
+        'Kick Return',
+        `Returned ${total} yards! ${teamLabel(rec)} starts at ${formatSpotLabel(spot, rec)}.`
       );
     });
 
-    // ================= TOUCHDOWN & PAT EVENTS =================
-    $('btnSelectPAT1').addEventListener('click', () => {
-      state.pendingPATPoints = 1;
-      dom.patPromptText.textContent = '1-Point Kick: Was the flipped card 4 or higher?';
-      dom.patConfirmBox.hidden = false;
+    // ================= OVERTIME COIN FLIP =================
+    $('btnFlipOTCoin').addEventListener('click', () => {
+      dom.btnFlipOTCoin.hidden = true;
+      dom.otCoinDisc.classList.remove('is-flipping');
+      void dom.otCoinDisc.offsetWidth; // Reflow to restart animation
+      dom.otCoinDisc.classList.add('is-flipping');
+      sfx.whistle();
+
+      setTimeout(() => {
+        const homeWins = Math.random() < 0.5;
+        state.otCoinWinner = homeWins ? 'home' : 'away';
+        dom.otCoinDisc.textContent = homeWins ? 'HOME' : 'AWAY';
+        dom.otStatusText.textContent = `${teamLabel(state.otCoinWinner)} wins the toss! Choose to Receive First or Defer.`;
+        dom.otChoiceRow.hidden = false;
+      }, 650);
     });
 
-    $('btnSelectPAT2').addEventListener('click', () => {
-      state.pendingPATPoints = 2;
-      dom.patPromptText.textContent = '2-Point Try: Did Offense beat Defense on the 1-card snap?';
-      dom.patConfirmBox.hidden = false;
+    $('btnOTReceive').addEventListener('click', () => {
+      startOvertimeWithReceiver(state.otCoinWinner || 'home');
     });
 
-    $('btnConfirmPATSuccess').addEventListener('click', () => {
-      sfx.score();
-      if (state.possession === 'home') state.scoreHome += state.pendingPATPoints;
-      else state.scoreAway += state.pendingPATPoints;
-      renderFieldAndScoreboard();
-      dom.patConfirmBox.hidden = true;
-      dom.kickoffBox.hidden = false;
-      setStatus(`PAT Good (+${state.pendingPATPoints})! Ready for kickoff.`);
+    $('btnOTDefer').addEventListener('click', () => {
+      const other = (state.otCoinWinner || 'home') === 'home' ? 'away' : 'home';
+      startOvertimeWithReceiver(other);
     });
 
-    $('btnConfirmPATFail').addEventListener('click', () => {
-      sfx.buzzer();
-      dom.patConfirmBox.hidden = true;
-      dom.kickoffBox.hidden = false;
-      setStatus('PAT failed. Ready for kickoff.');
-    });
-
-    $('btnTDKickTouchback').addEventListener('click', () => resolveKickoffTouchback(dom.modalTD));
-    $('btnTDKickReturnDeck').addEventListener('click', () => resolveKickoffReturn(dom.modalTD));
-
-    // ================= SAFETY & DELAY OF GAME EVENTS =================
+    // ================= SAFETY, DELAY, DEAL & QUARTER END =================
     $('btnProceedSafetyKick').addEventListener('click', () => {
       closeModal(dom.modalSafety, false);
       openPuntModal(true);
@@ -1368,7 +1906,7 @@
       resetPlayClock(false);
       renderFieldAndScoreboard();
       sfx.buzzer();
-      setStatus('Delay of Game enforced (-5 yards). Game clock stopped; play clock reset to :30.');
+      setStatus('Delay of Game (-5 yds). Clocks stopped; play clock reset to :30.');
     });
 
     $('btnWaveOffDelay').addEventListener('click', () => {
@@ -1377,12 +1915,7 @@
       setStatus('Delay of Game waived off. Play clock reset to :30.');
     });
 
-    // ================= DEAL & QUARTER END EVENTS =================
     $('btnResumeAfterDeal').addEventListener('click', () => {
-      if (state.pendingDealType) {
-        applyDealToHandCounts(state.pendingDealType);
-        state.pendingDealType = null;
-      }
       closeModal(dom.modalDeal, false);
       sfx.whistle();
       startGameClock();
@@ -1390,11 +1923,36 @@
     });
 
     dom.btnConfirmQuarterEnd.addEventListener('click', () => {
+      stopConfetti();
+      clearVictoryModalState();
       closeModal(dom.modalQuarterEnd, false);
-      advanceQuarter();
+
+      // Game Final -> New Game
+      if (state.quarter >= 4 && state.scoreHome !== state.scoreAway) {
+        startFreshGame(state.quarterLengthMinutes);
+        return;
+      }
+
+      // Halftime -> Q3 + 2nd Half Kickoff (to team that kicked off Q1)
+      if (state.quarter === 2) {
+        state.quarter = 3;
+        state.gameTimeRemaining = state.quarterLengthMinutes * 60;
+        resetPlayClock(false);
+        renderFieldAndScoreboard();
+        const secondHalfReceiver = state.openingReceiver === 'home' ? 'away' : 'home';
+        openKickoffModal('halftime', secondHalfReceiver);
+        return;
+      }
+
+      // Standard Quarter Advance (Q1 -> Q2 or Q3 -> Q4)
+      state.quarter += 1;
+      state.gameTimeRemaining = state.quarterLengthMinutes * 60;
+      resetPlayClock(false);
+      renderFieldAndScoreboard();
+      setStatus(`Quarter ${state.quarter} ready.`);
     });
 
-    // ================= SCORE ADJUST MODAL EVENTS =================
+    // ================= SCORE ADJUST, NEW GAME & RULES =================
     $('btnOpenScoreModal').addEventListener('click', () => {
       renderFieldAndScoreboard();
       openModal(dom.modalScoreAdjust);
@@ -1403,33 +1961,32 @@
 
     document.querySelectorAll('[data-add-home]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.scoreHome = Math.max(0, state.scoreHome + Number(btn.dataset.addHome));
+        const pts = Number(btn.dataset.addHome);
+        state.scoreHome = Math.max(0, state.scoreHome + pts);
         renderFieldAndScoreboard();
+        if (pts === 6) triggerScoreboardTD('home');
       });
     });
 
     document.querySelectorAll('[data-add-away]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.scoreAway = Math.max(0, state.scoreAway + Number(btn.dataset.addAway));
+        const pts = Number(btn.dataset.addAway);
+        state.scoreAway = Math.max(0, state.scoreAway + pts);
         renderFieldAndScoreboard();
+        if (pts === 6) triggerScoreboardTD('away');
       });
     });
 
     $('btnFlipPossessionManual').addEventListener('click', () => {
       switchPossession();
-      setStatus(`Possession switched manually to ${state.possession === 'home' ? 'Home' : 'Away'}.`);
+      setStatus(`Possession switched to ${teamLabel(state.possession)}.`);
     });
 
     $('btnNextQuarterModal').addEventListener('click', () => {
       closeModal(dom.modalScoreAdjust, false);
-      if (state.quarter === 2) {
-        openQuarterEndModal();
-      } else {
-        advanceQuarter();
-      }
+      handleQuarterExpired();
     });
 
-    // ================= NEW GAME / SETUP MODAL EVENTS =================
     $('btnResetGame').addEventListener('click', () => {
       syncQuarterLengthButtons();
       openModal(dom.modalNewGame);
@@ -1445,7 +2002,7 @@
 
     $('btnApplyQuarterLenOnly').addEventListener('click', () => {
       const activeBtn = document.querySelector('#quarterLengthPills .seg-btn.active');
-      const mins = activeBtn ? Number(activeBtn.dataset.mins) : 5;
+      const mins = activeBtn ? Number(activeBtn.dataset.mins) : 3;
       setQuarterLength(mins, true);
       closeModal(dom.modalNewGame, false);
       setStatus(`Quarter clock updated to ${mins} minutes.`);
@@ -1453,36 +2010,15 @@
 
     $('btnConfirmResetNewGame').addEventListener('click', () => {
       const activeBtn = document.querySelector('#quarterLengthPills .seg-btn.active');
-      const mins = activeBtn ? Number(activeBtn.dataset.mins) : 5;
-      pauseGameClock();
-      pausePlayClock();
-
-      state.scoreHome = 0;
-      state.scoreAway = 0;
-      state.possession = 'home';
-      state.ballOn = 20;
-      state.down = 1;
-      state.lineGain = 30;
-      state.distance = 10;
-      state.quarter = 1;
-      state.quarterLengthMinutes = mins;
-      state.gameTimeRemaining = mins * 60;
-      state.playClockTime = PLAY_CLOCK_DEFAULT;
-      state.playClockExpired = false;
-      state.offenseHandCount = FRESH_DRIVE_OFFENSE;
-      state.defenseHandCount = FRESH_DRIVE_DEFENSE;
-
-      syncQuarterLengthButtons();
-      renderFieldAndScoreboard();
+      const mins = activeBtn ? Number(activeBtn.dataset.mins) : 3;
       closeModal(dom.modalNewGame, false);
-      setStatus(`New game ready (${mins}-minute quarters). Deal 8 cards to Home, 5 to Away.`);
+      startFreshGame(mins);
     });
 
-    // ================= RULES MODAL EVENTS =================
     $('btnOpenRules').addEventListener('click', () => openModal(dom.modalRules));
     $('btnCloseRules').addEventListener('click', () => closeModal(dom.modalRules, true));
 
-    // Close dismissible modals on Escape key
+    // Escape key closes dismissible modals
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       const dismissible = [
@@ -1492,6 +2028,7 @@
         dom.modalPlayCalc,
         dom.modalPunt,
         dom.modalFG,
+        dom.modalHailMary,
       ];
       for (const modal of dismissible) {
         if (modal.classList.contains('active')) {
@@ -1500,10 +2037,16 @@
         }
       }
     });
+
+    window.addEventListener('resize', resizeCelebrationCanvas);
   }
 
-  // Initialize application
+  // =========================================================================
+  // INIT
+  // =========================================================================
   bindEvents();
   syncQuarterLengthButtons();
   renderFieldAndScoreboard();
+  // Launch Opening Coin Flip (Away calls Heads/Tails) to start the match
+  openOpeningCoinFlipModal();
 })();

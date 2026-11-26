@@ -7,12 +7,12 @@
     <title>Deck Football Companion</title>
     <meta
       name="description"
-      content="Responsive single-page web companion for Deck Football with a live scoreboard, 100-yard gridiron tracker, synchronized game and 30-second play clocks, hand limit tracker, and card play calculators."
+      content="Responsive single-page web companion for Deck Football with a live scoreboard, 100-yard gridiron tracker, synchronized clocks, v4 card play calculator, 4th-down & Hail Mary prompts, and overtime coin flip."
     />
     <meta property="og:title" content="Deck Football Companion" />
     <meta
       property="og:description"
-      content="Track score, downs, 100-yard field position, synchronized clocks, hands, and special teams for Deck Football."
+      content="Track score, downs, 100-yard field position, synchronized clocks, special teams, and card plays for Deck Football."
     />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -26,8 +26,9 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <canvas id="celebrationCanvas" class="celebration-canvas" aria-hidden="true"></canvas>
     <div class="app-shell">
-      <!-- Top Bar -->
+      <!-- Slim Top Bar -->
       <header class="top-bar">
         <div class="brand-lockup">
           <svg class="brand-mark" viewBox="0 0 28 20" aria-hidden="true">
@@ -41,8 +42,15 @@
         </div>
 
         <nav class="top-actions" aria-label="Game controls">
-          <button type="button" class="btn-ghost" id="btnToggleSound" aria-pressed="true" title="Toggle sound effects">
-            Sound On
+          <button
+            type="button"
+            class="btn-ghost btn-icon-sound"
+            id="btnToggleSound"
+            aria-pressed="true"
+            aria-label="Sound On"
+            title="Sound On"
+          >
+            🔊
           </button>
           <button type="button" class="btn-ghost" id="btnOpenScoreModal">Score</button>
           <button type="button" class="btn-ghost" id="btnOpenRules">Rules</button>
@@ -50,10 +58,14 @@
         </nav>
       </header>
 
-      <!-- Scoreboard & Synchronized Clocks -->
-      <section class="scoreboard-panel" aria-label="Scoreboard and clocks">
+      <!-- Compact Scoreboard with Single Unified Game Clock & Play Clock Bar -->
+      <section class="scoreboard-panel" id="scoreboardPanel" aria-label="Scoreboard and clocks">
+        <div class="td-scoreboard-banner" id="tdScoreboardBanner" aria-hidden="true">
+          <span class="td-banner-text" id="tdBannerText">TOUCHDOWN!</span>
+        </div>
         <div class="scoreboard-teams">
           <div class="team-block team-home is-offense" id="teamBlockHome">
+            <span class="score-pop-delta" id="popHome" aria-hidden="true">+6 TD</span>
             <div class="team-meta">
               <span class="team-label">Home</span>
               <span class="possession-text" id="badgeHome">Offense</span>
@@ -61,20 +73,20 @@
             <div class="team-score" id="scoreHome">0</div>
           </div>
 
-          <div class="quarter-center">
-            <div class="quarter-readout">
+          <div class="center-clock-block">
+            <div class="quarter-clock-row">
               <span class="quarter-label" id="quarterDisplay">Q1</span>
-              <span class="quarter-sep" aria-hidden="true">&middot;</span>
-              <span class="quarter-clock-inline" id="qtrBadgeTime">05:00</span>
+              <span class="game-clock-main" id="gameClock">03:00</span>
             </div>
-            <div class="segmented-control" id="quarterLengthSelector" role="group" aria-label="Quarter length">
-              <button type="button" class="seg-btn" data-mins="3">3m</button>
-              <button type="button" class="seg-btn active" data-mins="5">5m</button>
-              <button type="button" class="seg-btn" data-mins="7">7m</button>
+            <div class="play-clock-inline" id="playClockModule">
+              <span class="play-clock-tag">Play</span>
+              <span class="play-clock-val" id="playClock">:30</span>
+              <span class="clock-expired-flag" id="playClockExpiredFlag" hidden>EXP</span>
             </div>
           </div>
 
           <div class="team-block team-away" id="teamBlockAway">
+            <span class="score-pop-delta" id="popAway" aria-hidden="true">+6 TD</span>
             <div class="team-score" id="scoreAway">0</div>
             <div class="team-meta team-meta-right">
               <span class="team-label">Away</span>
@@ -83,550 +95,530 @@
           </div>
         </div>
 
-        <div class="clocks-strip">
-          <!-- Game Clock -->
-          <div class="clock-module">
-            <div class="clock-info">
-              <span class="clock-heading" id="gameClockLabel">Quarter Clock (5 min)</span>
-              <span class="clock-value clock-game" id="gameClock">05:00</span>
-            </div>
-            <div class="clock-controls">
-              <button type="button" class="btn-clock btn-clock-primary" id="btnToggleGameClock">Start</button>
-            </div>
-          </div>
-
-          <!-- 30-Second Play Clock -->
-          <div class="clock-module" id="playClockModule">
-            <div class="clock-info">
-              <div class="clock-heading-row">
-                <span class="clock-heading">Play Clock</span>
-                <span class="clock-expired-flag" id="playClockExpiredFlag" hidden>Expired</span>
-              </div>
-              <span class="clock-value clock-play" id="playClock">:30</span>
-            </div>
-            <div class="clock-controls">
-              <button type="button" class="btn-clock btn-clock-primary" id="btnStartPlayClock">Start</button>
-              <button type="button" class="btn-clock" id="btnPausePlayClock">Pause</button>
-              <button type="button" class="btn-clock" id="btnResetPlayClock">Reset</button>
-            </div>
+        <!-- Single Unified Timeout / Start Bar -->
+        <div class="clock-action-bar">
+          <button type="button" class="btn-timeout" id="btnTimeoutToggle">Start Clock</button>
+          <button type="button" class="btn-clock-util" id="btnResetPlayClock">Reset :30</button>
+          <div class="segmented-control" id="quarterLengthSelector" role="group" aria-label="Quarter length">
+            <button type="button" class="seg-btn active" data-mins="3">3m</button>
+            <button type="button" class="seg-btn" data-mins="5">5m</button>
+            <button type="button" class="seg-btn" data-mins="7">7m</button>
           </div>
         </div>
       </section>
 
-      <!-- Main Workspace (1-col Mobile, 2-col Desktop) -->
+      <!-- Main Workspace (Fits 1 Mobile Screen / 2 Columns on Desktop) -->
       <main class="workspace-grid">
-        <!-- Left Column: Field, Down & Distance, Hand Tracker -->
-        <div class="workspace-primary">
-          <!-- Down & Distance + 100-Yard Gridiron -->
-          <section class="panel field-panel" aria-label="Field position and down tracker">
-            <div class="down-header">
-              <div class="down-primary">
-                <h1 class="down-distance" id="downTag">1st &amp; 10</h1>
-                <p class="ball-location" id="locTag">Ball on Own 20 &middot; Driving Right &rarr;</p>
-              </div>
-              <div class="drive-meta">
-                <span class="drive-team" id="driveIndicator">Home Drive</span>
-                <span class="yard-numeric" id="ballOnNumeric">Yard 20</span>
-              </div>
+        <!-- Field & Down Panel -->
+        <section class="panel field-panel" aria-label="Field position and down tracker">
+          <div class="down-header">
+            <div class="down-primary">
+              <h1 class="down-distance" id="downTag">1st &amp; 10</h1>
+              <p class="ball-location" id="locTag">Own 20 &middot; Driving Right &rarr;</p>
+            </div>
+            <div class="drive-meta">
+              <span class="drive-team" id="driveIndicator">Home Drive</span>
+              <button type="button" class="btn-fourth-down-trigger" id="btnOpenFourthDown" hidden>
+                4th Down Options
+              </button>
+            </div>
+          </div>
+
+          <div class="gridiron-frame">
+            <svg id="fieldSvg" viewBox="0 0 1200 220" preserveAspectRatio="none" role="img" aria-label="100-yard football field">
+              <defs>
+                <pattern id="homePattern" width="24" height="24" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                  <rect width="24" height="24" fill="#0f2942" />
+                  <line x1="0" y1="0" x2="0" y2="24" stroke="#163b5e" stroke-width="10" />
+                </pattern>
+                <pattern id="awayPattern" width="24" height="24" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                  <rect width="24" height="24" fill="#3f151b" />
+                  <line x1="0" y1="0" x2="0" y2="24" stroke="#581d25" stroke-width="10" />
+                </pattern>
+              </defs>
+
+              <!-- 5-Yard Turf Stripes -->
+              <g id="grassStripes">
+                <rect x="100" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="150" y="0" width="50" height="220" fill="#166534" />
+                <rect x="200" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="250" y="0" width="50" height="220" fill="#166534" />
+                <rect x="300" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="350" y="0" width="50" height="220" fill="#166534" />
+                <rect x="400" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="450" y="0" width="50" height="220" fill="#166534" />
+                <rect x="500" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="550" y="0" width="50" height="220" fill="#166534" />
+                <rect x="600" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="650" y="0" width="50" height="220" fill="#166534" />
+                <rect x="700" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="750" y="0" width="50" height="220" fill="#166534" />
+                <rect x="800" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="850" y="0" width="50" height="220" fill="#166534" />
+                <rect x="900" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="950" y="0" width="50" height="220" fill="#166534" />
+                <rect x="1000" y="0" width="50" height="220" fill="#14532d" />
+                <rect x="1050" y="0" width="50" height="220" fill="#166534" />
+              </g>
+
+              <!-- To-Go Highlight -->
+              <rect id="svgToGoZone" x="300" y="0" width="100" height="220" fill="rgba(251, 191, 36, 0.14)" />
+
+              <!-- Endzones -->
+              <rect x="0" y="0" width="100" height="220" fill="url(#homePattern)" />
+              <text x="50" y="112" fill="#e2e8f0" font-size="30" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 50 112)" opacity="0.88" letter-spacing="6">HOME</text>
+
+              <rect x="1100" y="0" width="100" height="220" fill="url(#awayPattern)" />
+              <text x="1150" y="112" fill="#e2e8f0" font-size="30" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(90 1150 112)" opacity="0.88" letter-spacing="6">AWAY</text>
+
+              <!-- Goal Lines -->
+              <line x1="100" y1="0" x2="100" y2="220" stroke="#f8fafc" stroke-width="5" />
+              <line x1="1100" y1="0" x2="1100" y2="220" stroke="#f8fafc" stroke-width="5" />
+
+              <!-- 5-Yard Dashed Lines -->
+              <g stroke="rgba(248,250,252,0.22)" stroke-width="2" stroke-dasharray="5 5">
+                <line x1="150" y1="0" x2="150" y2="220" />
+                <line x1="250" y1="0" x2="250" y2="220" />
+                <line x1="350" y1="0" x2="350" y2="220" />
+                <line x1="450" y1="0" x2="450" y2="220" />
+                <line x1="550" y1="0" x2="550" y2="220" />
+                <line x1="650" y1="0" x2="650" y2="220" />
+                <line x1="750" y1="0" x2="750" y2="220" />
+                <line x1="850" y1="0" x2="850" y2="220" />
+                <line x1="950" y1="0" x2="950" y2="220" />
+                <line x1="1050" y1="0" x2="1050" y2="220" />
+              </g>
+
+              <!-- 10-Yard Major Lines -->
+              <g stroke="rgba(248,250,252,0.78)" stroke-width="2.5">
+                <line x1="200" y1="0" x2="200" y2="220" />
+                <line x1="300" y1="0" x2="300" y2="220" />
+                <line x1="400" y1="0" x2="400" y2="220" />
+                <line x1="500" y1="0" x2="500" y2="220" />
+                <line x1="600" y1="0" x2="600" y2="220" />
+                <line x1="700" y1="0" x2="700" y2="220" />
+                <line x1="800" y1="0" x2="800" y2="220" />
+                <line x1="900" y1="0" x2="900" y2="220" />
+                <line x1="1000" y1="0" x2="1000" y2="220" />
+              </g>
+
+              <!-- Hash Marks -->
+              <g stroke="rgba(248,250,252,0.62)" stroke-width="2">
+                <line x1="200" y1="62" x2="200" y2="72" /><line x1="300" y1="62" x2="300" y2="72" />
+                <line x1="400" y1="62" x2="400" y2="72" /><line x1="500" y1="62" x2="500" y2="72" />
+                <line x1="600" y1="62" x2="600" y2="72" /><line x1="700" y1="62" x2="700" y2="72" />
+                <line x1="800" y1="62" x2="800" y2="72" /><line x1="900" y1="62" x2="900" y2="72" />
+                <line x1="1000" y1="62" x2="1000" y2="72" />
+                <line x1="200" y1="148" x2="200" y2="158" /><line x1="300" y1="148" x2="300" y2="158" />
+                <line x1="400" y1="148" x2="400" y2="158" /><line x1="500" y1="148" x2="500" y2="158" />
+                <line x1="600" y1="148" x2="600" y2="158" /><line x1="700" y1="148" x2="700" y2="158" />
+                <line x1="800" y1="148" x2="800" y2="158" /><line x1="900" y1="148" x2="900" y2="158" />
+                <line x1="1000" y1="148" x2="1000" y2="158" />
+              </g>
+
+              <!-- Yard Numbers -->
+              <g font-size="22" font-weight="700" font-family="Barlow Condensed, sans-serif" fill="rgba(248,250,252,0.72)" text-anchor="middle">
+                <text x="200" y="202">10</text><text x="300" y="202">20</text><text x="400" y="202">30</text><text x="500" y="202">40</text>
+                <text x="600" y="202">50</text>
+                <text x="700" y="202">40</text><text x="800" y="202">30</text><text x="900" y="202">20</text><text x="1000" y="202">10</text>
+                <text x="200" y="24" transform="rotate(180 200 18)">10</text>
+                <text x="300" y="24" transform="rotate(180 300 18)">20</text>
+                <text x="400" y="24" transform="rotate(180 400 18)">30</text>
+                <text x="500" y="24" transform="rotate(180 500 18)">40</text>
+                <text x="600" y="24" transform="rotate(180 600 18)">50</text>
+                <text x="700" y="24" transform="rotate(180 700 18)">40</text>
+                <text x="800" y="24" transform="rotate(180 800 18)">30</text>
+                <text x="900" y="24" transform="rotate(180 900 18)">20</text>
+                <text x="1000" y="24" transform="rotate(180 1000 18)">10</text>
+              </g>
+
+              <!-- First Down Line -->
+              <g id="svgFirstDownGroup" transform="translate(400, 0)">
+                <line x1="0" y1="0" x2="0" y2="220" stroke="#fbbf24" stroke-width="6" />
+                <rect x="-20" y="4" width="40" height="22" rx="4" fill="#fbbf24" />
+                <text x="0" y="19" fill="#090e17" font-size="13" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle">1ST</text>
+              </g>
+
+              <!-- Line of Scrimmage & Ball Marker -->
+              <g id="svgLosGroup" transform="translate(300, 0)">
+                <line x1="0" y1="0" x2="0" y2="220" stroke="#38bdf8" stroke-width="5" stroke-dasharray="10 5" />
+                <ellipse cx="0" cy="110" rx="22" ry="13" fill="#92400e" stroke="#f8fafc" stroke-width="2.5" />
+                <line x1="-9" y1="110" x2="9" y2="110" stroke="#f8fafc" stroke-width="2" stroke-linecap="round" />
+                <line x1="-5" y1="106" x2="-5" y2="114" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" />
+                <line x1="0" y1="106" x2="0" y2="114" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" />
+                <line x1="5" y1="106" x2="5" y2="114" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" />
+                <rect x="-28" y="132" width="56" height="22" rx="4" fill="#38bdf8" />
+                <text id="svgLosText" x="0" y="147" fill="#090e17" font-size="12" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle">LOS &rarr;</text>
+              </g>
+            </svg>
+          </div>
+
+          <!-- Compact Status Line -->
+          <div class="status-inline" aria-live="polite">
+            <span class="status-kicker">Play</span>
+            <span class="status-text" id="statusText">Ready for opening kickoff.</span>
+          </div>
+        </section>
+
+        <!-- Controls & Quick Yardage Panel -->
+        <section class="panel controls-panel" aria-label="Play controls and quick yardage">
+          <div class="primary-actions-row">
+            <button type="button" class="btn-play-calc" id="btnOpenPlayCalc">Play Calculator</button>
+            <button type="button" class="btn-action action-turnover" id="btnTriggerTurnover">Turnover</button>
+            <button type="button" class="btn-action action-reset" id="btnForceFirstDown">1st &amp; 10</button>
+          </div>
+
+          <div class="quick-yardage-block">
+            <div class="yard-header-row">
+              <span class="yard-section-title">Quick Yardage</span>
+              <span class="yard-hint">Loss (-10 to -1) &middot; Gain (0 to +15)</span>
             </div>
 
-            <div class="gridiron-frame">
-              <svg id="fieldSvg" viewBox="0 0 1200 240" preserveAspectRatio="none" role="img" aria-label="100-yard football field showing line of scrimmage and first down marker">
-                <defs>
-                  <pattern id="homePattern" width="24" height="24" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                    <rect width="24" height="24" fill="#0f2942" />
-                    <line x1="0" y1="0" x2="0" y2="24" stroke="#163b5e" stroke-width="10" />
-                  </pattern>
-                  <pattern id="awayPattern" width="24" height="24" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                    <rect width="24" height="24" fill="#3f151b" />
-                    <line x1="0" y1="0" x2="0" y2="24" stroke="#581d25" stroke-width="10" />
-                  </pattern>
-                </defs>
-
-                <!-- Alternating 5-Yard Turf Stripes (x: 100 to 1100 = 100 yards) -->
-                <g id="grassStripes">
-                  <rect x="100" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="150" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="200" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="250" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="300" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="350" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="400" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="450" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="500" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="550" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="600" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="650" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="700" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="750" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="800" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="850" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="900" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="950" y="0" width="50" height="240" fill="#166534" />
-                  <rect x="1000" y="0" width="50" height="240" fill="#14532d" />
-                  <rect x="1050" y="0" width="50" height="240" fill="#166534" />
-                </g>
-
-                <!-- To-Go Zone Highlight between LOS and First Down -->
-                <rect id="svgToGoZone" x="300" y="0" width="100" height="240" fill="rgba(251, 191, 36, 0.14)" />
-
-                <!-- Endzones -->
-                <rect x="0" y="0" width="100" height="240" fill="url(#homePattern)" />
-                <text x="50" y="122" fill="#e2e8f0" font-size="30" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 50 122)" opacity="0.88" letter-spacing="6">HOME</text>
-
-                <rect x="1100" y="0" width="100" height="240" fill="url(#awayPattern)" />
-                <text x="1150" y="122" fill="#e2e8f0" font-size="30" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle" dominant-baseline="middle" transform="rotate(90 1150 122)" opacity="0.88" letter-spacing="6">AWAY</text>
-
-                <!-- Goal Lines -->
-                <line x1="100" y1="0" x2="100" y2="240" stroke="#f8fafc" stroke-width="5" />
-                <line x1="1100" y1="0" x2="1100" y2="240" stroke="#f8fafc" stroke-width="5" />
-
-                <!-- 5-Yard Dashed Lines -->
-                <g stroke="rgba(248,250,252,0.24)" stroke-width="2" stroke-dasharray="5 5">
-                  <line x1="150" y1="0" x2="150" y2="240" />
-                  <line x1="250" y1="0" x2="250" y2="240" />
-                  <line x1="350" y1="0" x2="350" y2="240" />
-                  <line x1="450" y1="0" x2="450" y2="240" />
-                  <line x1="550" y1="0" x2="550" y2="240" />
-                  <line x1="650" y1="0" x2="650" y2="240" />
-                  <line x1="750" y1="0" x2="750" y2="240" />
-                  <line x1="850" y1="0" x2="850" y2="240" />
-                  <line x1="950" y1="0" x2="950" y2="240" />
-                  <line x1="1050" y1="0" x2="1050" y2="240" />
-                </g>
-
-                <!-- 10-Yard Major Solid Lines -->
-                <g stroke="rgba(248,250,252,0.78)" stroke-width="2.5">
-                  <line x1="200" y1="0" x2="200" y2="240" />
-                  <line x1="300" y1="0" x2="300" y2="240" />
-                  <line x1="400" y1="0" x2="400" y2="240" />
-                  <line x1="500" y1="0" x2="500" y2="240" />
-                  <line x1="600" y1="0" x2="600" y2="240" />
-                  <line x1="700" y1="0" x2="700" y2="240" />
-                  <line x1="800" y1="0" x2="800" y2="240" />
-                  <line x1="900" y1="0" x2="900" y2="240" />
-                  <line x1="1000" y1="0" x2="1000" y2="240" />
-                </g>
-
-                <!-- Hash Marks -->
-                <g stroke="rgba(248,250,252,0.65)" stroke-width="2">
-                  <line x1="200" y1="68" x2="200" y2="78" /><line x1="300" y1="68" x2="300" y2="78" />
-                  <line x1="400" y1="68" x2="400" y2="78" /><line x1="500" y1="68" x2="500" y2="78" />
-                  <line x1="600" y1="68" x2="600" y2="78" /><line x1="700" y1="68" x2="700" y2="78" />
-                  <line x1="800" y1="68" x2="800" y2="78" /><line x1="900" y1="68" x2="900" y2="78" />
-                  <line x1="1000" y1="68" x2="1000" y2="78" />
-                  <line x1="200" y1="162" x2="200" y2="172" /><line x1="300" y1="162" x2="300" y2="172" />
-                  <line x1="400" y1="162" x2="400" y2="172" /><line x1="500" y1="162" x2="500" y2="172" />
-                  <line x1="600" y1="162" x2="600" y2="172" /><line x1="700" y1="162" x2="700" y2="172" />
-                  <line x1="800" y1="162" x2="800" y2="172" /><line x1="900" y1="162" x2="900" y2="172" />
-                  <line x1="1000" y1="162" x2="1000" y2="172" />
-                </g>
-
-                <!-- Yard Numbers -->
-                <g font-size="22" font-weight="700" font-family="Barlow Condensed, sans-serif" fill="rgba(248,250,252,0.72)" text-anchor="middle">
-                  <text x="200" y="220">10</text><text x="300" y="220">20</text><text x="400" y="220">30</text><text x="500" y="220">40</text>
-                  <text x="600" y="220">50</text>
-                  <text x="700" y="220">40</text><text x="800" y="220">30</text><text x="900" y="220">20</text><text x="1000" y="220">10</text>
-                  <text x="200" y="26" transform="rotate(180 200 20)">10</text>
-                  <text x="300" y="26" transform="rotate(180 300 20)">20</text>
-                  <text x="400" y="26" transform="rotate(180 400 20)">30</text>
-                  <text x="500" y="26" transform="rotate(180 500 20)">40</text>
-                  <text x="600" y="26" transform="rotate(180 600 20)">50</text>
-                  <text x="700" y="26" transform="rotate(180 700 20)">40</text>
-                  <text x="800" y="26" transform="rotate(180 800 20)">30</text>
-                  <text x="900" y="26" transform="rotate(180 900 20)">20</text>
-                  <text x="1000" y="26" transform="rotate(180 1000 20)">10</text>
-                </g>
-
-                <!-- First Down Line (Amber Gold) -->
-                <g id="svgFirstDownGroup" transform="translate(400, 0)">
-                  <line x1="0" y1="0" x2="0" y2="240" stroke="#fbbf24" stroke-width="6" />
-                  <rect x="-20" y="4" width="40" height="22" rx="4" fill="#fbbf24" />
-                  <text x="0" y="19" fill="#090e17" font-size="13" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle">1ST</text>
-                </g>
-
-                <!-- Line of Scrimmage & Ball Marker -->
-                <g id="svgLosGroup" transform="translate(300, 0)">
-                  <line x1="0" y1="0" x2="0" y2="240" stroke="#38bdf8" stroke-width="5" stroke-dasharray="10 5" />
-                  <ellipse cx="0" cy="120" rx="22" ry="13" fill="#92400e" stroke="#f8fafc" stroke-width="2.5" />
-                  <line x1="-9" y1="120" x2="9" y2="120" stroke="#f8fafc" stroke-width="2" stroke-linecap="round" />
-                  <line x1="-5" y1="116" x2="-5" y2="124" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" />
-                  <line x1="0" y1="116" x2="0" y2="124" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" />
-                  <line x1="5" y1="116" x2="5" y2="124" stroke="#f8fafc" stroke-width="1.8" stroke-linecap="round" />
-                  <rect x="-28" y="144" width="56" height="22" rx="4" fill="#38bdf8" />
-                  <text id="svgLosText" x="0" y="159" fill="#090e17" font-size="12" font-weight="800" font-family="Barlow Condensed, sans-serif" text-anchor="middle">LOS &rarr;</text>
-                </g>
-              </svg>
+            <div class="yard-grid yard-grid-loss">
+              <button type="button" class="btn-yard btn-loss" data-yard="-10">-10</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-9">-9</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-8">-8</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-7">-7</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-6">-6</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-5">-5</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-4">-4</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-3">-3</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-2">-2</button>
+              <button type="button" class="btn-yard btn-loss" data-yard="-1">-1</button>
             </div>
 
-            <!-- Manual Spot Scrubber -->
-            <div class="scrubber-row">
-              <label for="ballScrubber" class="scrubber-label">Spot Ball</label>
-              <input type="range" id="ballScrubber" min="1" max="99" value="20" aria-label="Adjust ball yard line" />
-              <span class="scrubber-value" id="scrubberYardVal">20 yd</span>
+            <div class="yard-grid yard-grid-gain">
+              <button type="button" class="btn-yard btn-inc" data-yard="0">0</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="1">+1</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="2">+2</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="3">+3</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="4">+4</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="5">+5</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="6">+6</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="7">+7</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="8">+8</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="9">+9</button>
+              <button type="button" class="btn-yard btn-firstdown" data-yard="10">+10</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="11">+11</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="12">+12</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="13">+13</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="14">+14</button>
+              <button type="button" class="btn-yard btn-gain" data-yard="15">+15</button>
             </div>
-          </section>
-
-          <!-- Hand Tracker Indicators -->
-          <section class="panel hand-tracker-panel" aria-label="Card hand tracker">
-            <div class="section-header-row">
-              <h2 class="section-title">Hand &amp; Play Tracker</h2>
-              <span class="meta-inline">Hand Limit: 12 Max &middot; Play Limit: Up to 3 Cards / Turn</span>
-            </div>
-
-            <div class="hand-grid">
-              <div class="hand-stat">
-                <div class="hand-stat-top">
-                  <span class="hand-role">Offense Hand</span>
-                  <span class="hand-rule-note">Start 8 &middot; 1st +7</span>
-                </div>
-                <div class="hand-counter-row">
-                  <button type="button" class="btn-step" id="btnOffHandDec" aria-label="Decrease offense cards">&minus;</button>
-                  <div class="hand-count-readout">
-                    <span class="hand-count-num" id="offenseHandCount">8</span>
-                    <span class="hand-count-cap">/ 12</span>
-                  </div>
-                  <button type="button" class="btn-step" id="btnOffHandInc" aria-label="Increase offense cards">+</button>
-                </div>
-                <div class="hand-bar-track" aria-hidden="true">
-                  <div class="hand-bar-fill fill-offense" id="offenseHandBar" style="width: 66.6%;"></div>
-                </div>
-                <span class="hand-status-note" id="offenseHandNote">Fresh drive deal (8 cards)</span>
-              </div>
-
-              <div class="hand-stat">
-                <div class="hand-stat-top">
-                  <span class="hand-role">Defense Hand</span>
-                  <span class="hand-rule-note">Start 5 &middot; 1st +5</span>
-                </div>
-                <div class="hand-counter-row">
-                  <button type="button" class="btn-step" id="btnDefHandDec" aria-label="Decrease defense cards">&minus;</button>
-                  <div class="hand-count-readout">
-                    <span class="hand-count-num" id="defenseHandCount">5</span>
-                    <span class="hand-count-cap">/ 12</span>
-                  </div>
-                  <button type="button" class="btn-step" id="btnDefHandInc" aria-label="Increase defense cards">+</button>
-                </div>
-                <div class="hand-bar-track" aria-hidden="true">
-                  <div class="hand-bar-fill fill-defense" id="defenseHandBar" style="width: 41.6%;"></div>
-                </div>
-                <span class="hand-status-note" id="defenseHandNote">Fresh drive deal (5 cards)</span>
-              </div>
-            </div>
-
-            <div class="limits-footer">
-              <div class="limit-item">
-                <span class="limit-key">Initial Deal</span>
-                <span class="limit-val">8 Off / 5 Def</span>
-              </div>
-              <div class="limit-item">
-                <span class="limit-key">Hand Cap</span>
-                <span class="limit-val">12 Cards Max</span>
-              </div>
-              <div class="limit-item">
-                <span class="limit-key">Per Play</span>
-                <span class="limit-val">Up to 3 Cards</span>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <!-- Right Column: Controls, Quick Yardage, Play Calc & Live Feed -->
-        <div class="workspace-secondary">
-          <!-- Primary Play Calculator + Situation Actions -->
-          <section class="panel controls-panel" aria-label="Play actions and quick yardage">
-            <button type="button" class="btn-play-calc" id="btnOpenPlayCalc">
-              Open Play Calculator
-            </button>
-
-            <div class="situation-grid">
-              <button type="button" class="btn-action action-punt" id="btnTriggerPunt">Punt</button>
-              <button type="button" class="btn-action action-fg" id="btnTriggerFG">Field Goal</button>
-              <button type="button" class="btn-action action-turnover" id="btnTriggerTurnover">Turnover</button>
-              <button type="button" class="btn-action action-penalty" id="btnTriggerJokerPenalty">Joker +15y</button>
-              <button type="button" class="btn-action action-reset" id="btnForceFirstDown">1st &amp; 10</button>
-            </div>
-
-            <div class="divider-line"></div>
-
-            <!-- Quick Yardage (-10 to +15) -->
-            <div class="quick-yardage-block">
-              <div class="section-header-row">
-                <h2 class="section-title">Quick Yardage</h2>
-                <span class="meta-inline">Tap net yards to resolve down</span>
-              </div>
-
-              <div class="yard-group-label">Loss (-10 to -1)</div>
-              <div class="yard-grid yard-grid-loss">
-                <button type="button" class="btn-yard btn-loss" data-yard="-10">-10</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-9">-9</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-8">-8</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-7">-7</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-6">-6</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-5">-5</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-4">-4</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-3">-3</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-2">-2</button>
-                <button type="button" class="btn-yard btn-loss" data-yard="-1">-1</button>
-              </div>
-
-              <div class="yard-group-label">No Gain &amp; Gain (0 to +15)</div>
-              <div class="yard-grid yard-grid-gain">
-                <button type="button" class="btn-yard btn-inc" data-yard="0">0 Inc</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="1">+1</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="2">+2</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="3">+3</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="4">+4</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="5">+5</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="6">+6</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="7">+7</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="8">+8</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="9">+9</button>
-                <button type="button" class="btn-yard btn-firstdown" data-yard="10">+10</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="11">+11</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="12">+12</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="13">+13</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="14">+14</button>
-                <button type="button" class="btn-yard btn-gain" data-yard="15">+15</button>
-              </div>
-            </div>
-          </section>
-
-          <!-- Play Log / Status -->
-          <section class="panel status-panel" aria-live="polite" aria-label="Latest play update">
-            <div class="status-row">
-              <span class="status-kicker">Last Play</span>
-              <span class="status-text" id="statusText">Ready for snap. Start the clock or log a play.</span>
-            </div>
-          </section>
-        </div>
+          </div>
+        </section>
       </main>
     </div>
 
-    <!-- ================= PLAY CALCULATOR MODAL ================= -->
+    <!-- ================= PLAY CALCULATOR MODAL (COMPACT v4) ================= -->
     <div class="modal-backdrop" id="modalPlayCalc" role="dialog" aria-modal="true" aria-labelledby="titlePlayCalc">
-      <div class="modal-card modal-card-wide">
+      <div class="modal-card modal-compact">
         <div class="modal-header">
           <div>
             <h2 class="modal-title" id="titlePlayCalc">Play Calculator</h2>
-            <p class="modal-subtitle">Clocks paused automatically &middot; Up to 3 cards per side</p>
+            <p class="modal-subtitle">v4 rules &middot; Off Ace = 1 (11 w/ Q) &middot; Def Ace = 11</p>
           </div>
-          <button type="button" class="btn-close" id="btnClosePlayCalc" aria-label="Close Play Calculator">&times;</button>
+          <button type="button" class="btn-close" id="btnClosePlayCalc" aria-label="Close">&times;</button>
         </div>
 
-        <div class="calc-mode-bar">
-          <span class="calc-mode-label">Ace Valuation</span>
-          <div class="segmented-control" id="aceModeSelector" role="group" aria-label="Ace valuation mode">
-            <button type="button" class="seg-btn active" data-ace-mode="standard">Ace = 11</button>
-            <button type="button" class="seg-btn" data-ace-mode="v4">v4 (Q+A = 11 / Solo 5)</button>
-          </div>
-        </div>
-
-        <!-- Direct Card Sum Quick Input -->
-        <div class="sum-input-row">
-          <div class="sum-field">
-            <label for="inputOffenseSum">Offense Sum (optional)</label>
-            <input type="number" id="inputOffenseSum" min="0" max="60" placeholder="Auto from cards" />
-          </div>
-          <div class="sum-field">
-            <label for="inputDefenseSum">Defense Sum (optional)</label>
-            <input type="number" id="inputDefenseSum" min="0" max="60" placeholder="Auto from cards" />
-          </div>
-        </div>
-
-        <!-- Offense Cards -->
-        <div class="calc-section">
+        <!-- Offense Cards (7x2 compact grid) -->
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
-            <span id="labelOffenseCount">Offense Cards (0/3)</span>
+            <span id="labelOffenseCount">Offense (0/3)</span>
             <button type="button" class="btn-text-sm" id="btnClearOffense">Clear</button>
           </div>
-          <div class="selected-cards" id="chipsOffense"></div>
-          <div class="card-keypad" id="keysOffense">
-            <button type="button" class="btn-key" data-type="num" data-val="2">2</button>
-            <button type="button" class="btn-key" data-type="num" data-val="3">3</button>
-            <button type="button" class="btn-key" data-type="num" data-val="4">4</button>
-            <button type="button" class="btn-key" data-type="num" data-val="5">5</button>
-            <button type="button" class="btn-key" data-type="num" data-val="6">6</button>
-            <button type="button" class="btn-key" data-type="num" data-val="7">7</button>
-            <button type="button" class="btn-key" data-type="num" data-val="8">8</button>
-            <button type="button" class="btn-key" data-type="num" data-val="9">9</button>
-            <button type="button" class="btn-key" data-type="num" data-val="10">10</button>
-            <button type="button" class="btn-key" data-type="jack" data-val="10">J (10)</button>
-            <button type="button" class="btn-key key-face" data-type="queen" data-val="10">Q (10)</button>
-            <button type="button" class="btn-key key-face" data-type="king" data-val="10">K (10)</button>
-            <button type="button" class="btn-key key-ace span-2" data-type="ace" data-val="11" id="btnOffAceKey">Ace (11)</button>
-            <button type="button" class="btn-key key-joker-off span-2" data-type="joker" data-val="11">Joker (K+Joker = +15y)</button>
+          <div class="selected-cards selected-compact" id="chipsOffense"></div>
+          <div class="card-keypad-7" id="keysOffense">
+            <button type="button" class="btn-key-sm" data-type="num" data-val="2">2</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="3">3</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="4">4</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="5">5</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="6">6</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="7">7</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="8">8</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="9">9</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-type="jack" data-val="10">J</button>
+            <button type="button" class="btn-key-sm key-face" data-type="queen" data-val="10">Q</button>
+            <button type="button" class="btn-key-sm key-face" data-type="king" data-val="10">K</button>
+            <button type="button" class="btn-key-sm key-ace" data-type="ace" data-val="1">A</button>
+            <button type="button" class="btn-key-sm key-joker-off" data-type="joker" data-val="1">Jkr</button>
           </div>
         </div>
 
-        <!-- Defense Cards -->
-        <div class="calc-section">
+        <!-- Defense Cards (7x2 compact grid) -->
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
-            <span id="labelDefenseCount">Defense Cards (0/3)</span>
+            <span id="labelDefenseCount">Defense (0/3)</span>
             <button type="button" class="btn-text-sm" id="btnClearDefense">Clear</button>
           </div>
-          <div class="selected-cards" id="chipsDefense"></div>
-          <div class="card-keypad" id="keysDefense">
-            <button type="button" class="btn-key" data-type="num" data-val="2">2</button>
-            <button type="button" class="btn-key" data-type="num" data-val="3">3</button>
-            <button type="button" class="btn-key" data-type="num" data-val="4">4</button>
-            <button type="button" class="btn-key" data-type="num" data-val="5">5</button>
-            <button type="button" class="btn-key" data-type="num" data-val="6">6</button>
-            <button type="button" class="btn-key" data-type="num" data-val="7">7</button>
-            <button type="button" class="btn-key" data-type="num" data-val="8">8</button>
-            <button type="button" class="btn-key" data-type="num" data-val="9">9</button>
-            <button type="button" class="btn-key" data-type="num" data-val="10">10</button>
-            <button type="button" class="btn-key" data-type="jack" data-val="10">J (10)</button>
-            <button type="button" class="btn-key key-face" data-type="queen" data-val="10">Q (10)</button>
-            <button type="button" class="btn-key key-face" data-type="king" data-val="10">K (10)</button>
-            <button type="button" class="btn-key key-ace span-2" data-type="ace" data-val="11">Ace (11 &middot; -10y Cap)</button>
-            <button type="button" class="btn-key key-joker-def span-2" data-type="joker" data-val="11">Joker (K+Joker = Turnover)</button>
+          <div class="selected-cards selected-compact" id="chipsDefense"></div>
+          <div class="card-keypad-7" id="keysDefense">
+            <button type="button" class="btn-key-sm" data-type="num" data-val="2">2</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="3">3</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="4">4</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="5">5</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="6">6</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="7">7</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="8">8</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="9">9</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-type="jack" data-val="10">J</button>
+            <button type="button" class="btn-key-sm key-face" data-type="queen" data-val="10">Q</button>
+            <button type="button" class="btn-key-sm key-face" data-type="king" data-val="10">K</button>
+            <button type="button" class="btn-key-sm key-ace" data-type="ace" data-val="11">A</button>
+            <button type="button" class="btn-key-sm key-joker-def" data-type="joker" data-val="11">Jkr</button>
           </div>
         </div>
 
-        <div class="result-summary">
-          <span class="result-label">Net Play Yardage</span>
-          <div class="result-value" id="calcDiffText">0 Yards</div>
-          <p class="result-subtext" id="calcOutcomeSubtext">Select cards or enter sums to calculate play outcome.</p>
+        <div class="result-summary result-compact">
+          <div class="result-inline-row">
+            <span class="result-label">Net Play</span>
+            <span class="result-value-md" id="calcDiffText">0 Yards</span>
+          </div>
+          <p class="result-subtext" id="calcOutcomeSubtext">Tap cards played by Offense and Defense.</p>
         </div>
 
+        <button type="button" class="btn-primary-full" id="btnApplyPlayCalc">Apply Play to Field</button>
+      </div>
+    </div>
+
+    <!-- ================= 4TH DOWN DECISION MODAL ================= -->
+    <div class="modal-backdrop" id="modalFourthDown" role="dialog" aria-modal="true" aria-labelledby="titleFourthDown">
+      <div class="modal-card modal-centered">
+        <span class="modal-kicker kicker-gold">4th Down Decision</span>
+        <h2 class="modal-title-lg" id="titleFourthDown">4th &amp; 10</h2>
+        <p class="modal-copy" id="fourthDownDetail">Ball on Own 20 &middot; Field Goal Target: 90 Yards</p>
+
         <div class="modal-actions-stack">
-          <button type="button" class="btn-primary-full" id="btnApplyPlayCalc">Apply Play to Field</button>
-          <button type="button" class="btn-secondary-full btn-joker-direct" id="btnCalcJokerPenalty">
-            Enforce Offensive Joker Penalty (+15y &amp; 1st Down)
-          </button>
+          <button type="button" class="btn-primary-full" id="btnFourthGoForIt">Go For It (Run Play)</button>
+          <div class="modal-actions-row">
+            <button type="button" class="btn-secondary-full btn-punt-tint" id="btnFourthPunt">Punt</button>
+            <button type="button" class="btn-amber-full" id="btnFourthFG">Field Goal</button>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ================= FINAL 3 SECONDS (HALF / GAME) MODAL ================= -->
+    <div class="modal-backdrop" id="modalFinalSeconds" role="dialog" aria-modal="true" aria-labelledby="titleFinalSeconds">
+      <div class="modal-card modal-centered">
+        <span class="modal-kicker kicker-danger" id="finalSecondsKicker">0:03 Left in Half</span>
+        <h2 class="modal-title-lg" id="titleFinalSeconds">Final Play Warning</h2>
+        <p class="modal-copy" id="finalSecondsDetail">
+          3 seconds remaining! Attempt a buzzer-beater Field Goal or launch an all-or-nothing Hail Mary.
+        </p>
+
+        <div class="modal-actions-stack">
+          <button type="button" class="btn-amber-full" id="btnFinalSecondsFG">Attempt Field Goal</button>
+          <button type="button" class="btn-primary-full" id="btnFinalSecondsHailMary">Go For It: Hail Mary</button>
+          <button type="button" class="btn-secondary-full" id="btnFinalSecondsNormal">Resume Normal Play</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= HAIL MARY MODAL ================= -->
+    <div class="modal-backdrop" id="modalHailMary" role="dialog" aria-modal="true" aria-labelledby="titleHailMary">
+      <div class="modal-card modal-compact">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title" id="titleHailMary">Hail Mary Bomb</h2>
+            <p class="modal-subtitle">Offense plays 3 cards (&times;2 range) vs. Defense 2 cards. Off Joker = TD, Def Joker = INT!</p>
+          </div>
+          <button type="button" class="btn-close" id="btnCloseHailMary" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="result-summary result-compact">
+          <div class="result-inline-row">
+            <span class="result-label">Distance to Endzone</span>
+            <span class="result-value-md" id="hailMaryTargetText">45 Yards</span>
+          </div>
+          <p class="result-subtext" id="hailMaryMathText">Offense (0 &times; 2) &minus; Defense (0) = 0 yds</p>
+        </div>
+
+        <!-- Hail Mary Offense (3 cards) -->
+        <div class="calc-section calc-section-tight">
+          <div class="calc-section-header">
+            <span id="labelHMOffense">Offense Bomb (0/3)</span>
+            <button type="button" class="btn-text-sm" id="btnClearHMOffense">Clear</button>
+          </div>
+          <div class="selected-cards selected-compact" id="chipsHMOffense"></div>
+          <div class="card-keypad-7" id="keysHMOffense">
+            <button type="button" class="btn-key-sm" data-type="num" data-val="2">2</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="3">3</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="4">4</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="5">5</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="6">6</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="7">7</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="8">8</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="9">9</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-type="jack" data-val="10">J</button>
+            <button type="button" class="btn-key-sm key-face" data-type="queen" data-val="10">Q</button>
+            <button type="button" class="btn-key-sm key-face" data-type="king" data-val="10">K</button>
+            <button type="button" class="btn-key-sm key-ace" data-type="ace" data-val="1">A</button>
+            <button type="button" class="btn-key-sm key-joker-off" data-type="joker" data-val="TD">Jkr</button>
+          </div>
+        </div>
+
+        <!-- Hail Mary Defense (2 cards) -->
+        <div class="calc-section calc-section-tight">
+          <div class="calc-section-header">
+            <span id="labelHMDefense">Defense Prevent (0/2)</span>
+            <button type="button" class="btn-text-sm" id="btnClearHMDefense">Clear</button>
+          </div>
+          <div class="selected-cards selected-compact" id="chipsHMDefense"></div>
+          <div class="card-keypad-7" id="keysHMDefense">
+            <button type="button" class="btn-key-sm" data-type="num" data-val="2">2</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="3">3</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="4">4</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="5">5</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="6">6</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="7">7</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="8">8</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="9">9</button>
+            <button type="button" class="btn-key-sm" data-type="num" data-val="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-type="jack" data-val="10">J</button>
+            <button type="button" class="btn-key-sm key-face" data-type="queen" data-val="10">Q</button>
+            <button type="button" class="btn-key-sm key-face" data-type="king" data-val="10">K</button>
+            <button type="button" class="btn-key-sm key-ace" data-type="ace" data-val="11">A</button>
+            <button type="button" class="btn-key-sm key-joker-def" data-type="joker" data-val="INT">Jkr</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn-primary-full" id="btnResolveHailMary">Launch Hail Mary</button>
       </div>
     </div>
 
     <!-- ================= PUNT & SAFETY FREE KICK MODAL ================= -->
     <div class="modal-backdrop" id="modalPunt" role="dialog" aria-modal="true" aria-labelledby="puntTitle">
-      <div class="modal-card modal-card-wide">
+      <div class="modal-card modal-compact">
         <div class="modal-header">
           <div>
             <h2 class="modal-title" id="puntTitle">4th Down Punt</h2>
             <p class="modal-subtitle" id="puntDesc">Val &times; 5y, Face = 45y, Ace = 50y. Defense plays 1 return card.</p>
           </div>
-          <button type="button" class="btn-close" id="btnClosePunt" aria-label="Close Punt Modal">&times;</button>
+          <button type="button" class="btn-close" id="btnClosePunt" aria-label="Close">&times;</button>
         </div>
 
-        <div class="calc-section">
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
             <span>Punting Card</span>
             <button type="button" class="btn-text-accent" id="btnPuntDrawDeck">Draw Deck (Empty Hand)</button>
           </div>
-          <div class="selected-cards" id="chipsPuntKick"></div>
-          <div class="card-keypad keypad-compact" id="keysPuntKick">
-            <button type="button" class="btn-key" data-val="2" data-label="2 (10y)">2 (10y)</button>
-            <button type="button" class="btn-key" data-val="3" data-label="3 (15y)">3 (15y)</button>
-            <button type="button" class="btn-key" data-val="4" data-label="4 (20y)">4 (20y)</button>
-            <button type="button" class="btn-key" data-val="5" data-label="5 (25y)">5 (25y)</button>
-            <button type="button" class="btn-key" data-val="6" data-label="6 (30y)">6 (30y)</button>
-            <button type="button" class="btn-key" data-val="7" data-label="7 (35y)">7 (35y)</button>
-            <button type="button" class="btn-key" data-val="8" data-label="8 (40y)">8 (40y)</button>
-            <button type="button" class="btn-key" data-val="9" data-label="9 (45y)">9 (45y)</button>
-            <button type="button" class="btn-key" data-val="10" data-label="10 (50y)">10 (50y)</button>
-            <button type="button" class="btn-key key-face" data-val="10" data-label="Face (45y)">Face (45y)</button>
-            <button type="button" class="btn-key key-ace span-2" data-val="11" data-label="Ace (50y)">Ace (50y)</button>
+          <div class="selected-cards selected-compact" id="chipsPuntKick"></div>
+          <div class="card-keypad-6" id="keysPuntKick">
+            <button type="button" class="btn-key-sm" data-val="2" data-label="2 (10y)">2</button>
+            <button type="button" class="btn-key-sm" data-val="3" data-label="3 (15y)">3</button>
+            <button type="button" class="btn-key-sm" data-val="4" data-label="4 (20y)">4</button>
+            <button type="button" class="btn-key-sm" data-val="5" data-label="5 (25y)">5</button>
+            <button type="button" class="btn-key-sm" data-val="6" data-label="6 (30y)">6</button>
+            <button type="button" class="btn-key-sm" data-val="7" data-label="7 (35y)">7</button>
+            <button type="button" class="btn-key-sm" data-val="8" data-label="8 (40y)">8</button>
+            <button type="button" class="btn-key-sm" data-val="9" data-label="9 (45y)">9</button>
+            <button type="button" class="btn-key-sm" data-val="10" data-label="10 (50y)">10</button>
+            <button type="button" class="btn-key-sm key-face" data-val="10" data-label="Face (45y)">Face</button>
+            <button type="button" class="btn-key-sm key-ace span-2" data-val="11" data-label="Ace (50y)">Ace (50y)</button>
           </div>
         </div>
 
-        <div class="calc-section">
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
             <span>Return Card</span>
             <button type="button" class="btn-text-sm" id="btnClearPuntReturn">No Return</button>
           </div>
-          <div class="selected-cards" id="chipsPuntReturn"></div>
-          <div class="card-keypad keypad-compact" id="keysPuntReturn">
-            <button type="button" class="btn-key" data-val="2" data-label="2 (2y)">2y</button>
-            <button type="button" class="btn-key" data-val="3" data-label="3 (3y)">3y</button>
-            <button type="button" class="btn-key" data-val="4" data-label="4 (4y)">4y</button>
-            <button type="button" class="btn-key" data-val="5" data-label="5 (5y)">5y</button>
-            <button type="button" class="btn-key" data-val="6" data-label="6 (6y)">6y</button>
-            <button type="button" class="btn-key" data-val="7" data-label="7 (7y)">7y</button>
-            <button type="button" class="btn-key" data-val="8" data-label="8 (8y)">8y</button>
-            <button type="button" class="btn-key" data-val="9" data-label="9 (9y)">9y</button>
-            <button type="button" class="btn-key" data-val="10" data-label="10 (10y)">10y</button>
-            <button type="button" class="btn-key key-face" data-val="10" data-label="Face (10y)">Face (10y)</button>
-            <button type="button" class="btn-key key-ace span-2" data-val="11" data-label="Ace (11y)">Ace (11y)</button>
+          <div class="selected-cards selected-compact" id="chipsPuntReturn"></div>
+          <div class="card-keypad-6" id="keysPuntReturn">
+            <button type="button" class="btn-key-sm" data-val="2" data-label="2 (2y)">2</button>
+            <button type="button" class="btn-key-sm" data-val="3" data-label="3 (3y)">3</button>
+            <button type="button" class="btn-key-sm" data-val="4" data-label="4 (4y)">4</button>
+            <button type="button" class="btn-key-sm" data-val="5" data-label="5 (5y)">5</button>
+            <button type="button" class="btn-key-sm" data-val="6" data-label="6 (6y)">6</button>
+            <button type="button" class="btn-key-sm" data-val="7" data-label="7 (7y)">7</button>
+            <button type="button" class="btn-key-sm" data-val="8" data-label="8 (8y)">8</button>
+            <button type="button" class="btn-key-sm" data-val="9" data-label="9 (9y)">9</button>
+            <button type="button" class="btn-key-sm" data-val="10" data-label="10 (10y)">10</button>
+            <button type="button" class="btn-key-sm key-face" data-val="10" data-label="Face (10y)">Face</button>
+            <button type="button" class="btn-key-sm key-ace span-2" data-val="11" data-label="Ace (11y)">Ace (11y)</button>
           </div>
         </div>
 
-        <div class="result-summary">
-          <span class="result-label">Projected Result</span>
-          <div class="result-value" id="puntNetText">0 Net Yards</div>
-          <p class="result-subtext" id="puntLandingPreview">Select a punting card to preview landing spot.</p>
+        <div class="result-summary result-compact">
+          <div class="result-inline-row">
+            <span class="result-label">Projected Punt</span>
+            <span class="result-value-md" id="puntNetText">0 Net Yards</span>
+          </div>
+          <p class="result-subtext" id="puntLandingPreview">Select a punt card to preview spot.</p>
         </div>
 
-        <button type="button" class="btn-primary-full" id="btnExecutePunt">Execute Punt &amp; Switch Possession</button>
+        <button type="button" class="btn-primary-full" id="btnExecutePunt">Execute Punt</button>
       </div>
     </div>
 
-    <!-- ================= FIELD GOAL MODAL ================= -->
+    <!-- ================= FIELD GOAL MODAL (NO AUTO-DRAW) ================= -->
     <div class="modal-backdrop" id="modalFG" role="dialog" aria-modal="true" aria-labelledby="titleFG">
-      <div class="modal-card modal-card-wide">
+      <div class="modal-card modal-compact">
         <div class="modal-header">
           <div>
             <h2 class="modal-title" id="titleFG">Field Goal Attempt</h2>
-            <p class="modal-subtitle">5 deck cards + up to 3 hand cards vs. up to 2 defense cards (Aces = 11)</p>
+            <p class="modal-subtitle">Input 5 drawn deck cards + up to 3 hand cards vs. 2 defense cards</p>
           </div>
-          <button type="button" class="btn-close" id="btnCloseFG" aria-label="Close Field Goal Modal">&times;</button>
+          <button type="button" class="btn-close" id="btnCloseFG" aria-label="Close">&times;</button>
         </div>
 
-        <div class="result-summary">
-          <span class="result-label">Target Distance Required (Strictly Exceed)</span>
-          <div class="result-value" id="fgTargetText">45 Yards</div>
-          <p class="result-subtext" id="fgMathText">Offense (0) - Defense (0) = 0 Net</p>
+        <div class="result-summary result-compact">
+          <div class="result-inline-row">
+            <span class="result-label">Target Required (&gt;)</span>
+            <span class="result-value-md" id="fgTargetText">45 Yards</span>
+          </div>
+          <p class="result-subtext" id="fgMathText">Offense (0) &minus; Defense (0) = 0 Net</p>
         </div>
 
-        <div class="calc-section">
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
-            <span>Offense Kick (Deck + Hand)</span>
-            <div class="inline-actions">
-              <button type="button" class="btn-text-accent" id="btnAutoFGDeck">Auto-Draw 5 Deck</button>
-              <button type="button" class="btn-text-sm" id="btnClearFGOffense">Clear</button>
-            </div>
+            <span id="labelFGOffense">Offense Kick (0/8)</span>
+            <button type="button" class="btn-text-sm" id="btnClearFGOffense">Clear</button>
           </div>
-          <div class="selected-cards" id="chipsFGOffense"></div>
-          <div class="card-keypad" id="keysFGOffense">
-            <button type="button" class="btn-key" data-val="2" data-label="2">2</button>
-            <button type="button" class="btn-key" data-val="3" data-label="3">3</button>
-            <button type="button" class="btn-key" data-val="4" data-label="4">4</button>
-            <button type="button" class="btn-key" data-val="5" data-label="5">5</button>
-            <button type="button" class="btn-key" data-val="6" data-label="6">6</button>
-            <button type="button" class="btn-key" data-val="7" data-label="7">7</button>
-            <button type="button" class="btn-key" data-val="8" data-label="8">8</button>
-            <button type="button" class="btn-key" data-val="9" data-label="9">9</button>
-            <button type="button" class="btn-key" data-val="10" data-label="10">10</button>
-            <button type="button" class="btn-key key-face" data-val="10" data-label="Face (10)">Face (10)</button>
-            <button type="button" class="btn-key key-ace span-2" data-val="11" data-label="Ace (11)">Ace (11)</button>
-            <button type="button" class="btn-key key-joker-off span-4" data-val="25" data-label="Joker (+25y)">Joker Penalty / Kick Boost (+25 Yards)</button>
+          <div class="selected-cards selected-compact" id="chipsFGOffense"></div>
+          <div class="card-keypad-6" id="keysFGOffense">
+            <button type="button" class="btn-key-sm" data-val="2" data-label="2">2</button>
+            <button type="button" class="btn-key-sm" data-val="3" data-label="3">3</button>
+            <button type="button" class="btn-key-sm" data-val="4" data-label="4">4</button>
+            <button type="button" class="btn-key-sm" data-val="5" data-label="5">5</button>
+            <button type="button" class="btn-key-sm" data-val="6" data-label="6">6</button>
+            <button type="button" class="btn-key-sm" data-val="7" data-label="7">7</button>
+            <button type="button" class="btn-key-sm" data-val="8" data-label="8">8</button>
+            <button type="button" class="btn-key-sm" data-val="9" data-label="9">9</button>
+            <button type="button" class="btn-key-sm" data-val="10" data-label="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-val="10" data-label="Face">Face</button>
+            <button type="button" class="btn-key-sm key-ace" data-val="11" data-label="Ace">Ace</button>
+            <button type="button" class="btn-key-sm key-joker-off" data-val="25" data-label="Joker (+25)">+25 Jkr</button>
           </div>
         </div>
 
-        <div class="calc-section">
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
-            <span>Defense Contest (Max 2 Cards)</span>
+            <span id="labelFGDefense">Defense Block (0/2)</span>
             <button type="button" class="btn-text-sm" id="btnClearFGDefense">Clear</button>
           </div>
-          <div class="selected-cards" id="chipsFGDefense"></div>
-          <div class="card-keypad" id="keysFGDefense">
-            <button type="button" class="btn-key" data-val="2" data-label="2">2</button>
-            <button type="button" class="btn-key" data-val="3" data-label="3">3</button>
-            <button type="button" class="btn-key" data-val="4" data-label="4">4</button>
-            <button type="button" class="btn-key" data-val="5" data-label="5">5</button>
-            <button type="button" class="btn-key" data-val="6" data-label="6">6</button>
-            <button type="button" class="btn-key" data-val="7" data-label="7">7</button>
-            <button type="button" class="btn-key" data-val="8" data-label="8">8</button>
-            <button type="button" class="btn-key" data-val="9" data-label="9">9</button>
-            <button type="button" class="btn-key" data-val="10" data-label="10">10</button>
-            <button type="button" class="btn-key key-face" data-val="10" data-label="Face (10)">Face (10)</button>
-            <button type="button" class="btn-key key-ace span-2" data-val="11" data-label="Ace (11)">Ace (11)</button>
-            <button type="button" class="btn-key key-joker-def span-4" data-val="JOKER" data-label="Defense Joker (Block)">Defense Joker (Blocked Kick)</button>
+          <div class="selected-cards selected-compact" id="chipsFGDefense"></div>
+          <div class="card-keypad-6" id="keysFGDefense">
+            <button type="button" class="btn-key-sm" data-val="2" data-label="2">2</button>
+            <button type="button" class="btn-key-sm" data-val="3" data-label="3">3</button>
+            <button type="button" class="btn-key-sm" data-val="4" data-label="4">4</button>
+            <button type="button" class="btn-key-sm" data-val="5" data-label="5">5</button>
+            <button type="button" class="btn-key-sm" data-val="6" data-label="6">6</button>
+            <button type="button" class="btn-key-sm" data-val="7" data-label="7">7</button>
+            <button type="button" class="btn-key-sm" data-val="8" data-label="8">8</button>
+            <button type="button" class="btn-key-sm" data-val="9" data-label="9">9</button>
+            <button type="button" class="btn-key-sm" data-val="10" data-label="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-val="10" data-label="Face">Face</button>
+            <button type="button" class="btn-key-sm key-ace" data-val="11" data-label="Ace">Ace</button>
+            <button type="button" class="btn-key-sm key-joker-def" data-val="JOKER" data-label="Block Jkr">Block</button>
           </div>
         </div>
 
-        <button type="button" class="btn-primary-full btn-amber" id="btnResolveFG">Resolve Field Goal</button>
+        <button type="button" class="btn-amber-full" id="btnResolveFG">Resolve Field Goal</button>
       </div>
     </div>
 
@@ -635,56 +627,127 @@
       <div class="modal-card modal-centered">
         <span class="modal-kicker kicker-gold">3 Points Awarded</span>
         <h2 class="modal-title-lg" id="titleFGMade">Field Goal Is Good</h2>
-        <p class="modal-copy" id="fgMadeDetail">Proceed to kickoff to the opponent.</p>
-
-        <div class="modal-actions-row">
-          <button type="button" class="btn-secondary-full" id="btnFGKickTouchback">Touchback (Own 25)</button>
-          <button type="button" class="btn-primary-full" id="btnFGKickReturnDeck">Flip 4-Card Return</button>
-        </div>
+        <p class="modal-copy" id="fgMadeDetail">3 points added. Ready for kickoff.</p>
+        <button type="button" class="btn-primary-full" id="btnFGProceedKickoff">Proceed to Kickoff</button>
       </div>
     </div>
 
     <!-- ================= FIELD GOAL MISSED MODAL ================= -->
     <div class="modal-backdrop" id="modalFGMissed" role="dialog" aria-modal="true" aria-labelledby="titleFGMissed">
       <div class="modal-card modal-centered">
-        <span class="modal-kicker kicker-danger">Turnover on Kick</span>
-        <h2 class="modal-title-lg" id="titleFGMissed">Field Goal No Good</h2>
+        <span class="modal-kicker kicker-danger">No Good</span>
+        <h2 class="modal-title-lg" id="titleFGMissed">Field Goal Missed</h2>
         <p class="modal-copy" id="fgMissedDetail">Defense takes over at the spot of the kick.</p>
-        <button type="button" class="btn-primary-full" id="btnConfirmFGMissed">Switch Possession &amp; Deal</button>
+        <button type="button" class="btn-primary-full" id="btnConfirmFGMissed">Continue</button>
       </div>
     </div>
 
-    <!-- ================= TOUCHDOWN & PAT MODAL ================= -->
-    <div class="modal-backdrop" id="modalTD" role="dialog" aria-modal="true" aria-labelledby="titleTD">
+    <!-- ================= TD PHASE 1: PAT CHOICE MODAL ================= -->
+    <div class="modal-backdrop" id="modalTDChoice" role="dialog" aria-modal="true" aria-labelledby="titleTDChoice">
       <div class="modal-card modal-centered">
-        <span class="modal-kicker kicker-gold">6 Points Awarded</span>
-        <h2 class="modal-title-lg" id="titleTD">Touchdown</h2>
-        <p class="modal-copy">Choose your Point After Touchdown (PAT) attempt:</p>
+        <span class="modal-kicker kicker-gold">6 Points Awarded &middot; Step 1 of 3</span>
+        <h2 class="modal-title-lg" id="titleTDChoice">Touchdown!</h2>
+        <p class="modal-copy" id="tdChoiceDetail">Choose your Point After Touchdown attempt:</p>
+        <div class="modal-actions-row">
+          <button type="button" class="btn-secondary-full" id="btnSelectPAT1">1-Pt Kick (Flip 4+)</button>
+          <button type="button" class="btn-primary-full" id="btnSelectPAT2">2-Pt Try (1-Card)</button>
+        </div>
+      </div>
+    </div>
 
-        <div class="modal-actions-row" id="patChoiceRow">
-          <button type="button" class="btn-secondary-full" id="btnSelectPAT1">
-            1-Pt Kick (Flip 4+)
-          </button>
-          <button type="button" class="btn-secondary-full" id="btnSelectPAT2">
-            2-Pt Try (1-Card Snap)
-          </button>
+    <!-- ================= TD PHASE 2: PAT RESULT MODAL ================= -->
+    <div class="modal-backdrop" id="modalPATResult" role="dialog" aria-modal="true" aria-labelledby="titlePATResult">
+      <div class="modal-card modal-centered">
+        <span class="modal-kicker kicker-gold">Point After Touchdown &middot; Step 2 of 3</span>
+        <h2 class="modal-title-lg" id="titlePATResult">1-Point Kick</h2>
+        <p class="modal-copy" id="patResultPrompt">Was the flipped card 4 or higher?</p>
+        <div class="modal-actions-row">
+          <button type="button" class="btn-primary-full" id="btnConfirmPATSuccess">Good / Success</button>
+          <button type="button" class="btn-danger-full" id="btnConfirmPATFail">No Good / Failed</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= OPENING GAME COIN FLIP MODAL ================= -->
+    <div class="modal-backdrop" id="modalOpeningCoinFlip" role="dialog" aria-modal="true" aria-labelledby="titleOpeningCoinFlip">
+      <div class="modal-card modal-centered">
+        <span class="modal-kicker kicker-gold">Start of Game &middot; Coin Toss</span>
+        <h2 class="modal-title-lg" id="titleOpeningCoinFlip">Opening Coin Flip</h2>
+        <p class="modal-copy" id="openingCoinStatus">
+          <strong class="away-text">Away</strong> calls the coin toss in the air. Pick Heads or Tails to flip:
+        </p>
+
+        <div class="coin-stage">
+          <div class="coin-disc" id="openingCoinDisc">COIN</div>
         </div>
 
-        <div class="inline-callout" id="patConfirmBox" hidden>
-          <p class="callout-title" id="patPromptText">Was the conversion good?</p>
-          <div class="modal-actions-row">
-            <button type="button" class="btn-primary-full" id="btnConfirmPATSuccess">Good / Success</button>
-            <button type="button" class="btn-danger-full" id="btnConfirmPATFail">No Good / Failed</button>
+        <div class="modal-actions-row" id="openingCallRow">
+          <button type="button" class="btn-amber-full" id="btnCallHeads">Away Calls Heads</button>
+          <button type="button" class="btn-amber-full" id="btnCallTails">Away Calls Tails</button>
+        </div>
+
+        <div class="modal-actions-row" id="openingChoiceRow" hidden>
+          <button type="button" class="btn-primary-full" id="btnOpeningReceive">Receive First</button>
+          <button type="button" class="btn-secondary-full" id="btnOpeningDefer">Defer (2nd Half)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= UNIFIED KICKOFF MODAL (OPENING / HALF / TD / FG / OT) ================= -->
+    <div class="modal-backdrop" id="modalKickoff" role="dialog" aria-modal="true" aria-labelledby="titleKickoff">
+      <div class="modal-card modal-centered">
+        <span class="modal-kicker kicker-gold" id="kickoffKicker">Kickoff</span>
+        <h2 class="modal-title-lg" id="titleKickoff">Opening Kickoff</h2>
+        <p class="modal-copy" id="kickoffDetail">Home receives the kickoff. Choose Touchback or return 4 physical cards.</p>
+
+        <div class="modal-actions-row">
+          <button type="button" class="btn-secondary-full" id="btnKickoffTouchback">Touchback (Own 25)</button>
+          <button type="button" class="btn-primary-full" id="btnKickoffReturn">Kick Return (4 Cards)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PHYSICAL 4-CARD KICK RETURN MODAL ================= -->
+    <div class="modal-backdrop" id="modalKickReturn" role="dialog" aria-modal="true" aria-labelledby="titleKickReturn">
+      <div class="modal-card modal-compact">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title" id="titleKickReturn">Kick Return</h2>
+            <p class="modal-subtitle" id="kickReturnSubtitle">Tap the 4 physical cards drawn from the deck</p>
+          </div>
+          <button type="button" class="btn-close" id="btnCloseKickReturn" aria-label="Back to Kickoff">&times;</button>
+        </div>
+
+        <div class="calc-section calc-section-tight">
+          <div class="calc-section-header">
+            <span id="labelKickReturnCount">Return Cards (0/4)</span>
+            <button type="button" class="btn-text-sm" id="btnClearKickReturn">Clear</button>
+          </div>
+          <div class="selected-cards selected-compact" id="chipsKickReturn"></div>
+          <div class="card-keypad-6" id="keysKickReturn">
+            <button type="button" class="btn-key-sm" data-val="2" data-label="2">2</button>
+            <button type="button" class="btn-key-sm" data-val="3" data-label="3">3</button>
+            <button type="button" class="btn-key-sm" data-val="4" data-label="4">4</button>
+            <button type="button" class="btn-key-sm" data-val="5" data-label="5">5</button>
+            <button type="button" class="btn-key-sm" data-val="6" data-label="6">6</button>
+            <button type="button" class="btn-key-sm" data-val="7" data-label="7">7</button>
+            <button type="button" class="btn-key-sm" data-val="8" data-label="8">8</button>
+            <button type="button" class="btn-key-sm" data-val="9" data-label="9">9</button>
+            <button type="button" class="btn-key-sm" data-val="10" data-label="10">10</button>
+            <button type="button" class="btn-key-sm key-face" data-val="10" data-label="Face">Face</button>
+            <button type="button" class="btn-key-sm key-ace span-2" data-val="11" data-label="Ace">Ace (11)</button>
           </div>
         </div>
 
-        <div class="inline-callout" id="kickoffBox" hidden>
-          <p class="callout-title">Kickoff to Opponent</p>
-          <div class="modal-actions-row">
-            <button type="button" class="btn-secondary-full" id="btnTDKickTouchback">Touchback (Own 25)</button>
-            <button type="button" class="btn-primary-full" id="btnTDKickReturnDeck">Flip 4-Card Return</button>
+        <div class="result-summary result-compact">
+          <div class="result-inline-row">
+            <span class="result-label">Return Yardage</span>
+            <span class="result-value-md" id="kickReturnTotalText">0 Yards</span>
           </div>
+          <p class="result-subtext" id="kickReturnSpotText">Select up to 4 drawn cards to spot the ball.</p>
         </div>
+
+        <button type="button" class="btn-primary-full" id="btnApplyKickReturn">Spot Ball &amp; Deal</button>
       </div>
     </div>
 
@@ -693,8 +756,8 @@
       <div class="modal-card modal-centered">
         <span class="modal-kicker kicker-danger">2 Points to Defense</span>
         <h2 class="modal-title-lg" id="titleSafety">Safety</h2>
-        <p class="modal-copy" id="safetyDetail">
-          Offense tackled in their own endzone. Defending team scores +2 points and receives a Free Kick from the 20-yard line.
+        <p class="modal-copy">
+          Offense tackled in their own endzone. Defending team scores +2 points and receives a Free Kick from the 20.
         </p>
         <button type="button" class="btn-primary-full" id="btnProceedSafetyKick">Proceed to Free Kick</button>
       </div>
@@ -706,7 +769,7 @@
         <span class="modal-kicker kicker-danger">Play Clock Expired (:00)</span>
         <h2 class="modal-title-lg" id="titleDelay">Delay of Game</h2>
         <p class="modal-copy">
-          The 30-second play clock expired before the snap. Enforce the 5-yard penalty or wave it off if the cards were played in time.
+          Enforce the 5-yard penalty or wave it off if cards were laid down in time.
         </p>
         <div class="modal-actions-stack">
           <button type="button" class="btn-danger-full" id="btnEnforceDelayPenalty">Enforce 5-Yard Penalty</button>
@@ -715,12 +778,55 @@
       </div>
     </div>
 
+    <!-- ================= OVERTIME COIN FLIP MODAL ================= -->
+    <div class="modal-backdrop" id="modalOvertime" role="dialog" aria-modal="true" aria-labelledby="titleOvertime">
+      <div class="modal-card modal-centered">
+        <span class="modal-kicker kicker-gold">Tied After Regulation</span>
+        <h2 class="modal-title-lg" id="titleOvertime">Overtime &middot; 2:00</h2>
+        <p class="modal-copy" id="otStatusText">
+          Flip the coin to determine who receives first possession in the 2-minute Overtime period.
+        </p>
+
+        <div class="coin-stage" id="otCoinStage">
+          <div class="coin-disc" id="otCoinDisc">COIN</div>
+        </div>
+
+        <button type="button" class="btn-amber-full" id="btnFlipOTCoin">Flip Coin</button>
+
+        <div class="modal-actions-row" id="otChoiceRow" hidden>
+          <button type="button" class="btn-primary-full" id="btnOTReceive">Receive First</button>
+          <button type="button" class="btn-secondary-full" id="btnOTDefer">Defer</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ================= QUARTER / HALFTIME / FINAL MODAL ================= -->
     <div class="modal-backdrop" id="modalQuarterEnd" role="dialog" aria-modal="true" aria-labelledby="titleQuarterEnd">
-      <div class="modal-card modal-centered">
+      <div class="modal-card modal-centered" id="quarterEndCard">
+        <div class="victory-trophy-wrap" id="victoryTrophyWrap" hidden aria-hidden="true">
+          <svg class="victory-trophy-svg" viewBox="0 0 64 64" fill="none">
+            <path d="M20 12H44V26C44 33.732 38.627 39 32 39C25.373 39 20 33.732 20 26V12Z" fill="#fbbf24" stroke="#fef3c7" stroke-width="2.5" />
+            <path d="M20 16H12C12 24 15.5 28 20 28" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" />
+            <path d="M44 16H52C52 24 48.5 28 44 28" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" />
+            <path d="M32 39V48" stroke="#f59e0b" stroke-width="4" stroke-linecap="round" />
+            <rect x="21" y="48" width="22" height="5" rx="2" fill="#fbbf24" />
+            <rect x="17" y="53" width="30" height="4" rx="2" fill="#d97706" />
+          </svg>
+        </div>
         <span class="modal-kicker kicker-gold" id="quarterEndKicker">End of Quarter</span>
         <h2 class="modal-title-lg" id="titleQuarterEnd">Quarter Complete</h2>
-        <p class="modal-copy" id="quarterEndBody">Ready to begin the next quarter.</p>
+        <div class="victory-score-strip" id="victoryScoreStrip" hidden>
+          <div class="victory-team-col" id="victoryColHome">
+            <span class="victory-team-name home-text">Home</span>
+            <span class="victory-team-score" id="victoryFinalHome">0</span>
+          </div>
+          <span class="victory-vs">FINAL</span>
+          <div class="victory-team-col" id="victoryColAway">
+            <span class="victory-team-name away-text">Away</span>
+            <span class="victory-team-score" id="victoryFinalAway">0</span>
+          </div>
+        </div>
+        <p class="modal-copy" id="quarterEndBody">Ready for the next quarter.</p>
         <div class="modal-actions-stack">
           <button type="button" class="btn-primary-full" id="btnConfirmQuarterEnd">Start Next Quarter</button>
         </div>
@@ -733,139 +839,196 @@
         <span class="modal-kicker kicker-gold" id="dealKicker">Card Deal</span>
         <h2 class="modal-title-lg" id="dealTitle">First Down</h2>
         <p class="modal-copy" id="dealBody">
-          Deal +7 cards to Offense and +5 cards to Defense. Max hand cap is 12 cards.
+          Deal +7 cards to Offense and +5 cards to Defense (12-card max).
         </p>
-        <button type="button" class="btn-primary-full" id="btnResumeAfterDeal">Hands Dealt &middot; Resume Game</button>
+        <button type="button" class="btn-primary-full" id="btnResumeAfterDeal">Hands Dealt &middot; Resume</button>
       </div>
     </div>
 
-    <!-- ================= SCORE & QUARTER ADJUST MODAL ================= -->
+    <!-- ================= SCORE ADJUST MODAL ================= -->
     <div class="modal-backdrop" id="modalScoreAdjust" role="dialog" aria-modal="true" aria-labelledby="titleScoreAdjust">
-      <div class="modal-card">
+      <div class="modal-card modal-compact">
         <div class="modal-header">
           <div>
-            <h2 class="modal-title" id="titleScoreAdjust">Adjust Score &amp; Situation</h2>
-            <p class="modal-subtitle">Manual overrides for score, possession, and quarter</p>
+            <h2 class="modal-title" id="titleScoreAdjust">Adjust Score &amp; Quarter</h2>
+            <p class="modal-subtitle">Manual overrides for score and possession</p>
           </div>
-          <button type="button" class="btn-close" id="btnCloseScoreModal" aria-label="Close Score Modal">&times;</button>
+          <button type="button" class="btn-close" id="btnCloseScoreModal" aria-label="Close">&times;</button>
         </div>
 
         <div class="score-adjust-grid">
-          <div class="calc-section">
+          <div class="calc-section calc-section-tight">
             <div class="calc-section-header">
               <span class="home-text">Home</span>
               <span class="mono-val" id="modalHomeScoreVal">0</span>
             </div>
             <div class="adjust-btn-grid">
-              <button type="button" class="btn-key" data-add-home="6">+6 TD</button>
-              <button type="button" class="btn-key" data-add-home="3">+3 FG</button>
-              <button type="button" class="btn-key" data-add-home="2">+2</button>
-              <button type="button" class="btn-key" data-add-home="1">+1 XP</button>
-              <button type="button" class="btn-key span-2" data-add-home="-1">-1 Point</button>
+              <button type="button" class="btn-key-sm" data-add-home="6">+6 TD</button>
+              <button type="button" class="btn-key-sm" data-add-home="3">+3 FG</button>
+              <button type="button" class="btn-key-sm" data-add-home="2">+2</button>
+              <button type="button" class="btn-key-sm" data-add-home="1">+1 XP</button>
+              <button type="button" class="btn-key-sm span-2" data-add-home="-1">-1 Pt</button>
             </div>
           </div>
 
-          <div class="calc-section">
+          <div class="calc-section calc-section-tight">
             <div class="calc-section-header">
               <span class="away-text">Away</span>
               <span class="mono-val" id="modalAwayScoreVal">0</span>
             </div>
             <div class="adjust-btn-grid">
-              <button type="button" class="btn-key" data-add-away="6">+6 TD</button>
-              <button type="button" class="btn-key" data-add-away="3">+3 FG</button>
-              <button type="button" class="btn-key" data-add-away="2">+2</button>
-              <button type="button" class="btn-key" data-add-away="1">+1 XP</button>
-              <button type="button" class="btn-key span-2" data-add-away="-1">-1 Point</button>
+              <button type="button" class="btn-key-sm" data-add-away="6">+6 TD</button>
+              <button type="button" class="btn-key-sm" data-add-away="3">+3 FG</button>
+              <button type="button" class="btn-key-sm" data-add-away="2">+2</button>
+              <button type="button" class="btn-key-sm" data-add-away="1">+1 XP</button>
+              <button type="button" class="btn-key-sm span-2" data-add-away="-1">-1 Pt</button>
             </div>
           </div>
         </div>
 
         <div class="modal-actions-row">
           <button type="button" class="btn-secondary-full" id="btnFlipPossessionManual">Switch Possession</button>
-          <button type="button" class="btn-primary-full" id="btnNextQuarterModal">Advance Quarter</button>
+          <button type="button" class="btn-primary-full" id="btnNextQuarterModal">Next Quarter</button>
         </div>
       </div>
     </div>
 
     <!-- ================= NEW GAME / QUARTER SETUP MODAL ================= -->
     <div class="modal-backdrop" id="modalNewGame" role="dialog" aria-modal="true" aria-labelledby="titleNewGame">
-      <div class="modal-card">
+      <div class="modal-card modal-compact">
         <div class="modal-header">
           <div>
-            <h2 class="modal-title" id="titleNewGame">New Game &amp; Clock Setup</h2>
-            <p class="modal-subtitle">Select quarter length or reset match to Q1</p>
+            <h2 class="modal-title" id="titleNewGame">New Game Setup</h2>
+            <p class="modal-subtitle">Quarter duration and full match reset</p>
           </div>
-          <button type="button" class="btn-close" id="btnCloseNewGameModal" aria-label="Close Setup Modal">&times;</button>
+          <button type="button" class="btn-close" id="btnCloseNewGameModal" aria-label="Close">&times;</button>
         </div>
 
-        <div class="calc-section">
+        <div class="calc-section calc-section-tight">
           <div class="calc-section-header">
             <span>Quarter Length</span>
           </div>
           <div class="segmented-control segmented-full" id="quarterLengthPills" role="group" aria-label="Match quarter length">
-            <button type="button" class="seg-btn" data-mins="3">3 Minutes</button>
-            <button type="button" class="seg-btn active" data-mins="5">5 Minutes</button>
-            <button type="button" class="seg-btn" data-mins="7">7 Minutes</button>
+            <button type="button" class="seg-btn active" data-mins="3">3 Min</button>
+            <button type="button" class="seg-btn" data-mins="5">5 Min</button>
+            <button type="button" class="seg-btn" data-mins="7">7 Min</button>
           </div>
         </div>
 
         <div class="modal-actions-stack">
-          <button type="button" class="btn-secondary-full" id="btnApplyQuarterLenOnly">Apply Quarter Length to Current Clock</button>
-          <button type="button" class="btn-danger-full" id="btnConfirmResetNewGame">Reset Full Game (0 - 0, Q1)</button>
+          <button type="button" class="btn-secondary-full" id="btnApplyQuarterLenOnly">Update Clock Length Only</button>
+          <button type="button" class="btn-danger-full" id="btnConfirmResetNewGame">Start New Game (0 - 0, Coin Flip)</button>
         </div>
       </div>
     </div>
 
-    <!-- ================= RULEBOOK MODAL ================= -->
+    <!-- ================= EXHAUSTIVE RULEBOOK MODAL ================= -->
     <div class="modal-backdrop" id="modalRules" role="dialog" aria-modal="true" aria-labelledby="titleRules">
-      <div class="modal-card modal-card-wide">
+      <div class="modal-card modal-rules-card">
         <div class="modal-header">
           <div>
-            <h2 class="modal-title" id="titleRules">Deck Football Rulebook</h2>
-            <p class="modal-subtitle">52-card deck + 2 Jokers (54 cards total)</p>
+            <h2 class="modal-title" id="titleRules">Deck Football Official Rulebook</h2>
+            <p class="modal-subtitle">Complete v4 rules &middot; Standard 52-card deck + 2 Jokers (54 cards)</p>
           </div>
-          <button type="button" class="btn-close" id="btnCloseRules" aria-label="Close Rules">&times;</button>
+          <button type="button" class="btn-close" id="btnCloseRules" aria-label="Close">&times;</button>
         </div>
 
-        <div class="rules-content">
+        <div class="rules-content rules-scroll-body">
           <div class="rule-block">
-            <h3>1. Deck Setup &amp; Hand Limits</h3>
+            <h3>1. Deck Setup &amp; Deal Quantities</h3>
             <ul>
-              <li><strong>Fresh Drive Deal:</strong> Offense receives 8 cards; Defense receives 5 cards.</li>
-              <li><strong>First Down Deal:</strong> Offense adds +7 cards; Defense adds +5 cards. Unused cards carry over.</li>
-              <li><strong>Hand Cap:</strong> Maximum 12 cards held at any time. Discard any excess immediately.</li>
-              <li><strong>Play Limit:</strong> Up to 3 cards played per side on each snap.</li>
+              <li><strong>Deck:</strong> Standard 52-card playing deck plus 2 Jokers (54 cards total).</li>
+              <li><strong>Fresh Drive Deal:</strong> At the start of every new possession (kickoff, punt, missed FG, or turnover), Offense receives <strong>8 cards</strong> and Defense receives <strong>5 cards</strong>.</li>
+              <li><strong>First Down Deal:</strong> Whenever Offense earns a new 1st &amp; 10, Offense adds <strong>+7 cards</strong> and Defense adds <strong>+5 cards</strong>. Unused cards stay in your hand and carry across downs and drives.</li>
+              <li><strong>Hand Cap (12 Max):</strong> Neither player may hold more than <strong>12 cards</strong> at any time. Any excess cards drawn beyond 12 must be discarded immediately.</li>
+              <li><strong>Play Limit (3 Max):</strong> Each side may lay down between <strong>0 and 3 cards</strong> per snap.</li>
             </ul>
           </div>
 
           <div class="rule-block">
-            <h3>2. Card Values &amp; Joker Mechanics</h3>
+            <h3>2. Opening Coin Flip, Kickoffs &amp; Returns</h3>
             <ul>
-              <li><strong>Numbers (2–10):</strong> Worth face value in yards.</li>
-              <li><strong>Face Cards (J, Q, K):</strong> Worth 10 yards each.</li>
-              <li><strong>Aces:</strong> Automatically worth 11 yards (optional v4 mode sets Offense Ace to 11y with Queen, else 5y).</li>
-              <li><strong>Offensive Joker Penalty (or K + Joker):</strong> +15-yard penalty and automatic 1st Down (+25 yards on Field Goal attempts).</li>
-              <li><strong>Defensive Joker + King:</strong> Immediate Turnover unless Offense also plays a King to protect the ball.</li>
-              <li><strong>Tackle for Loss Cap:</strong> Standard losses clamp at -5 yards; Defensive Ace or solo Joker extends the sack cap to -10 yards.</li>
+              <li><strong>Coin Flip:</strong> Before every new game, the <strong>Away</strong> team calls Heads or Tails on the digital coin flip. The winner chooses to <strong>Receive First</strong> or <strong>Defer</strong> to the 2nd half (the team that kicks off Q1 receives the Q3 kickoff).</li>
+              <li><strong>Kickoff Options:</strong> On every kickoff (opening, 2nd half, post-TD, post-FG, and Overtime), the receiving team chooses either a <strong>Touchback</strong> (ball placed at Own 25) or a <strong>Kick Return</strong>.</li>
+              <li><strong>Kick Return:</strong> Flip <strong>4 physical cards</strong> from the deck and enter them into the companion app. The combined card total (Numbers = face value, Face = 10, Ace = 11) determines the return yardage from the goal line.</li>
             </ul>
           </div>
 
           <div class="rule-block">
             <h3>3. Empty Hand Rule</h3>
             <ul>
-              <li>If a side runs out of cards mid-drive, they play subsequent downs with 0 cards (0 yards).</li>
-              <li><strong>Punting Exception:</strong> Draw 1 card from the deck. Drawing a Joker is a muffed punt and immediate turnover at the spot.</li>
+              <li><strong>0 Cards Held:</strong> If a player runs completely out of cards mid-drive, they must play subsequent downs with <strong>0 cards (0 yards)</strong> until the next 1st down or change of possession.</li>
+              <li><strong>Unopposed Plays:</strong> If Offense is empty, any cards Defense plays result in a loss/sack (subject to the TFL clamp). If Defense is empty, Offense gains unopposed yardage.</li>
+              <li><strong>Punting Exception:</strong> If punting with an empty hand, draw <strong>1 card</strong> from the deck. If a <strong>Joker</strong> is drawn, it is a <strong>muffed punt</strong> resulting in an immediate turnover right at the line of scrimmage.</li>
             </ul>
           </div>
 
           <div class="rule-block">
-            <h3>4. Special Teams, Clocks &amp; Halftime</h3>
+            <h3>4. v4 Card Values &amp; Special Combos</h3>
             <ul>
-              <li><strong>Punts:</strong> Card value &times; 5 yards (Face = 45y, Ace = 50y) minus Defense return card. Landing in the endzone is a touchback to the 20.</li>
-              <li><strong>Field Goals:</strong> Offense draws 5 deck cards + up to 3 hand cards (Joker = +25y boost) vs. up to 2 defense cards (Joker = Block). Net must strictly exceed distance to goal + 10.</li>
-              <li><strong>Delay of Game:</strong> 30-second play clock. Reaching :00 triggers a 5-yard penalty.</li>
-              <li><strong>Safeties:</strong> Tackled in own endzone awards +2 to Defense and triggers a Free Kick from the 20.</li>
-              <li><strong>Halftime (End of Q2):</strong> Discard both hands and reshuffle the entire 54-card deck for Q3.</li>
+              <li><strong>Number Cards (2–10):</strong> Worth face value (2 to 10 yards).</li>
+              <li><strong>Face Cards (J, Q, K):</strong> Worth <strong>10 yards</strong> each.</li>
+              <li><strong>Offensive Aces &amp; Solo Jokers:</strong> Worth <strong>11 yards</strong> when paired with a <strong>Queen (Q)</strong> on the same play; otherwise worth <strong>1 yard</strong>.</li>
+              <li><strong>Defensive Aces &amp; Solo Jokers:</strong> Always worth <strong>11 yards</strong> and unlock the extended -10 yard sack cap.</li>
+              <li><strong>Offensive King + Joker (Penalty):</strong> Triggers an automatic <strong>+15-yard defensive penalty and automatic 1st Down</strong> (Pass Interference / Unnecessary Roughness).</li>
+              <li><strong>Defensive King + Joker (Turnover):</strong> Causes an immediate <strong>Turnover</strong> at the spot <em>unless</em> Offense also plays a <strong>King</strong> on the same snap to protect the ball.</li>
+            </ul>
+          </div>
+
+          <div class="rule-block">
+            <h3>5. Tackle for Loss (TFL) Clamping</h3>
+            <ul>
+              <li><strong>Standard Loss Cap:</strong> When Defense's card sum beats Offense's card sum on a standard play, negative yardage is clamped at <strong>-5 yards</strong>.</li>
+              <li><strong>Ace / Joker Sack Cap:</strong> If Defense played an <strong>Ace</strong> or a <strong>Solo Joker</strong> on the play, the loss cap extends down to <strong>-10 yards</strong>.</li>
+            </ul>
+          </div>
+
+          <div class="rule-block">
+            <h3>6. 4th Down Decisions &amp; Punting</h3>
+            <ul>
+              <li><strong>4th Down Prompt:</strong> Upon reaching 4th down, Offense chooses to <strong>Go For It</strong>, <strong>Punt</strong>, or attempt a <strong>Field Goal</strong>.</li>
+              <li><strong>Punt Distance:</strong> Punting team plays 1 card: Numbers (2–10) = <strong>Value &times; 5 yards</strong>, Face cards (J/Q/K) = <strong>45 yards</strong>, Ace = <strong>50 yards</strong>.</li>
+              <li><strong>Punt Return &amp; Touchback:</strong> Receiving team may play 1 return card (Numbers = face value, Face = 10y, Ace = 11y) subtracted from the kick. Punts reaching the endzone result in a <strong>Touchback</strong> at the receiving team's 20-yard line.</li>
+            </ul>
+          </div>
+
+          <div class="rule-block">
+            <h3>7. Field Goals</h3>
+            <ul>
+              <li><strong>Target Distance:</strong> Required yardage equals <strong>yards to opponent's goal line + 10</strong>. Net kick must <strong>strictly exceed</strong> the target (<code>Net &gt; Target</code>) to be good for <strong>+3 points</strong>.</li>
+              <li><strong>Offense Kick Cards:</strong> Draw <strong>5 physical cards</strong> from the deck and optionally add up to <strong>3 cards</strong> from hand (max 8 cards). Aces are worth <strong>11 yards</strong> for both teams on Field Goals. Playing an <strong>Offense Joker</strong> adds a <strong>+25-yard kick boost</strong>.</li>
+              <li><strong>Defense Contest:</strong> Defense may play up to <strong>2 cards</strong> from hand to subtract from the kick. Playing a <strong>Defense Joker</strong> immediately <strong>blocks the kick</strong>.</li>
+              <li><strong>Result:</strong> Good kicks award +3 and move to kickoff; missed or blocked kicks turn the ball over to Defense at the spot of the kick.</li>
+            </ul>
+          </div>
+
+          <div class="rule-block">
+            <h3>8. Touchdowns, PATs &amp; Safeties</h3>
+            <ul>
+              <li><strong>Touchdown (+6 Points):</strong> Crossing the opponent's goal line awards +6 points and proceeds through three phases: (1) choose 1-Pt Kick or 2-Pt Try, (2) resolve conversion result, and (3) kickoff to opponent.</li>
+              <li><strong>1-Point Extra Point:</strong> Flip the top card of the deck — <strong>4 or higher is Good (+1)</strong>; 2 or 3 misses.</li>
+              <li><strong>2-Point Conversion:</strong> Single-card snap (1 card each) — Offense must beat Defense for <strong>+2 points</strong>.</li>
+              <li><strong>Safety (+2 Points):</strong> If a negative play pushes Offense into their own endzone, Defense scores <strong>+2 points</strong> and the conceding team must perform a <strong>Free Kick from their own 20-yard line</strong> using punt rules.</li>
+            </ul>
+          </div>
+
+          <div class="rule-block">
+            <h3>9. Clocks, Timeouts &amp; Delay of Game</h3>
+            <ul>
+              <li><strong>Quarter Length:</strong> Standard quarters are <strong>3 minutes</strong> (configurable to 3, 5, or 7 minutes).</li>
+              <li><strong>Synchronized Modal Pause:</strong> Whenever any calculator, decision, or deal modal opens, both the quarter clock and play clock automatically pause.</li>
+              <li><strong>Timeouts:</strong> Use the single <strong>Timeout</strong> button to pause both clocks at any time; no timeouts are charged against either team.</li>
+              <li><strong>30-Second Play Clock:</strong> Offense has 30 seconds to call "HIKE" and lay down cards. Reaching <strong>:00</strong> stops the game clock and triggers a <strong>5-yard Delay of Game penalty</strong> (or wave-off).</li>
+            </ul>
+          </div>
+
+          <div class="rule-block">
+            <h3>10. Final 3 Seconds, Hail Mary, Halftime &amp; Overtime</h3>
+            <ul>
+              <li><strong>Final 3 Seconds Warning:</strong> With <strong>0:03</strong> left in either half (Q2 or Q4), Offense may attempt a buzzer-beater <strong>Field Goal</strong>, resume normal play, or launch a <strong>Hail Mary</strong>.</li>
+              <li><strong>Hail Mary Bomb:</strong> Offense plays <strong>3 cards</strong> (v4 Ace rules apply, total multiplied by <strong>&times;2</strong>) against Defense's <strong>2 cards</strong>. A <strong>Defense Joker</strong> is an endzone Interception; an <strong>Offense Joker</strong> is an automatic Miracle Touchdown; otherwise <code>(Offense &times; 2) &minus; Defense &ge; Yards to Endzone</code> scores a Touchdown as the clock expires.</li>
+              <li><strong>Halftime (End of Q2):</strong> Discard both players' hands completely and reshuffle all 54 cards before the Q3 kickoff.</li>
+              <li><strong>Overtime:</strong> Played <strong>only</strong> if the score is tied at the end of Q4. Features a digital <strong>Coin Flip</strong> for first possession and a <strong>2:00</strong> Overtime clock.</li>
             </ul>
           </div>
         </div>
